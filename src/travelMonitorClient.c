@@ -1,4 +1,5 @@
 #include <bits/types/siginfo_t.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -6,6 +7,8 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <dirent.h>
 #include <time.h>
@@ -17,6 +20,7 @@
 
 #define INITIAL_BUFFSIZE 100
 #define MAX_LINE 100
+#define S_PORT 4000
 
 
 // String compare function wrapper
@@ -136,9 +140,22 @@ int main(int argc, char *argv[]){
     // Logfile path
     char *logPath = "./logs/log_file.";
 
+    char hostname[HOST_NAME_MAX];
+    gethostname(hostname, HOST_NAME_MAX);
+
+    struct hostent *ent = gethostbyname(hostname);
+    struct in_addr *locIP = (struct in_addr *)ent->h_addr_list[0];
+
+    int ports[numMonitors];
+    for(int i = 0; i < numMonitors; i++){
+        ports[i] = S_PORT+i;
+    }
+
+    struct sockaddr_in addr[numMonitors];
+    int sockfd[numMonitors];
+
     pid_t pids[numMonitors];
     
-    int port = 0;
     char **mon_argv[numMonitors];
     int mon_argc[numMonitors];
 
@@ -149,8 +166,8 @@ int main(int argc, char *argv[]){
         
         mon_argv[i][0] = "./monitorServer";
         mon_argv[i][1] = "-p";
-        mon_argv[i][2] = malloc((getDigits(port)+1)*sizeof(char));
-        sprintf(mon_argv[i][2], "%d", port);
+        mon_argv[i][2] = malloc((getDigits(ports[i])+1)*sizeof(char));
+        sprintf(mon_argv[i][2], "%d", ports[i]);
         mon_argv[i][3] = "-t";
         mon_argv[i][4] = malloc((getDigits(numThreads)+1)*sizeof(char));
         sprintf(mon_argv[i][4], "%d", numThreads);
@@ -234,6 +251,11 @@ int main(int argc, char *argv[]){
         count++;
     }
 
+    for(int i = 0; i < numMonitors; i++){
+        mon_argv[i] = realloc(mon_argv[i], ++mon_argc[i]*sizeof(char *));
+        mon_argv[i][mon_argc[i]-1] = NULL;
+    }
+
     for(Listptr l = subdirs->head->next; l != l->tail; l = l->next){
         free(l->value);
     }
@@ -256,6 +278,29 @@ int main(int argc, char *argv[]){
         }else{
             pids[i] = pid;
         }
+    }
+
+    for(int i = 0; i < numMonitors; i++){
+        if ((sockfd[i] = socket(AF_INET, SOCK_STREAM, 0)) == 0){
+            perror("socket failed");
+            exit(EXIT_FAILURE);
+        }
+
+        addr[i].sin_family = AF_INET;
+        addr[i].sin_port = htons(ports[i]);
+
+        if(inet_pton(AF_INET, inet_ntoa(*locIP), &addr[i].sin_addr) <= 0){
+            perror("inet_pton");
+            exit(EXIT_FAILURE);
+        }
+
+        if (connect(sockfd[i], (struct sockaddr *)&addr, sizeof(addr)) < 0){
+            perror("connect");
+            exit(EXIT_FAILURE);
+        }
+
+        printf("Sending 'Hiya'\n");
+        send(sockfd[i], "Hiya", 5, 0);
     }
 
     return 0;

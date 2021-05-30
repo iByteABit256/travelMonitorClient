@@ -4,6 +4,9 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include <unistd.h>
 #include <time.h>
 #include <dirent.h>
@@ -15,6 +18,7 @@
 #include "../src/vaccineMonitor.h"
 
 #define INITIAL_BUFFSIZE 100
+#define MAX_CONNECTIONS 3
 
 
 // Parses parameters of executable
@@ -195,6 +199,50 @@ int main(int argc, char *argv[]){
             cyclicBufferSize: %d\n\
             filepaths: %p\n", getpid(), port, numThreads, sizeOfBloom, socketBufferSize, cyclicBufferSize, filepaths);
 
+    
+    int sockfd;
+
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == 0){
+        perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    struct sockaddr_in addr;
+
+    char hostname[HOST_NAME_MAX];
+    gethostname(hostname, HOST_NAME_MAX);
+
+    struct hostent *ent = gethostbyname(hostname);
+    struct in_addr *locIP = (struct in_addr *)ent->h_addr_list[0];
+
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+
+    if(inet_pton(AF_INET, inet_ntoa(*locIP), &addr.sin_addr) <= 0){
+        perror("inet_pton");
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(sockfd, MAX_CONNECTIONS) < 0)
+    {
+        perror("listen");
+        exit(EXIT_FAILURE);
+    }
+
+    int new_socket;
+    socklen_t addr_length = sizeof(addr);
+
+    while(1){
+        if ((new_socket = accept(sockfd, (struct sockaddr *)&addr, &addr_length) < 0)){
+            perror("accept");
+            exit(EXIT_FAILURE);
+        }
+
+        char buff[5];
+        read(new_socket, buff, 5);
+
+        printf("Read %s\n", buff);
+    }
 
     // Listptr countryPaths = ListCreate();
 
