@@ -288,19 +288,64 @@ int main(int argc, char *argv[]){
 
         addr[i].sin_family = AF_INET;
         addr[i].sin_port = htons(ports[i]);
-
-        if(inet_pton(AF_INET, inet_ntoa(*locIP), &addr[i].sin_addr) <= 0){
-            perror("inet_pton");
-            exit(EXIT_FAILURE);
-        }
+        addr[i].sin_addr.s_addr = locIP->s_addr;
 
         if (connect(sockfd[i], (struct sockaddr *)&addr, sizeof(addr)) < 0){
             perror("connect");
             exit(EXIT_FAILURE);
         }
+    }
 
-        printf("Sending 'Hiya'\n");
-        send(sockfd[i], "Hiya", 5, 0);
+    struct pollfd *pfds;
+    int num_open_fds, nfds;
+
+    num_open_fds = nfds = numMonitors;
+
+    pfds = calloc(nfds, sizeof(struct pollfd));    
+    if(pfds == NULL){
+        perror("calloc error\n");
+        exit(1);
+    }
+
+    for(int i = 0; i < numMonitors; i++){
+        pfds[i].fd = sockfd[i];
+        pfds[i].events = POLLIN;
+    }
+
+    while(num_open_fds > 0){
+        int ready = poll(pfds, nfds, -1);
+
+        if(ready == -1){
+            perror("poll error\n");
+            exit(1);
+        }
+
+        for(int i = 0; i < num_open_fds; i++){
+            if(pfds[i].revents != 0){
+                if(pfds[i].revents & POLLIN){
+                    char buff[socketBufferSize];
+
+                    int bytes_read = read(pfds[i].fd, buff, socketBufferSize);
+
+                    if(bytes_read == -1){
+                        perror("Error in read");
+                        exit(1);
+                    }else if(bytes_read == 0){
+                        continue;
+                    }
+
+                    printf("Read %s from fd %d\n", buff, pfds[i].fd);
+
+                }else{
+                    if(close(pfds[i].fd)){
+                        perror("close error\n");
+                        exit(1);
+                    }
+                    pfds[i].fd = -1; //Ignore events on next call
+                    num_open_fds--;
+                }
+            }
+        }
     }
 
     return 0;
