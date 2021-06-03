@@ -154,7 +154,7 @@ int main(int argc, char *argv[]){
     struct sockaddr_in addr[numMonitors];
     int sockfd[numMonitors];
 
-    pid_t pids[numMonitors];
+    //pid_t pids[numMonitors];
     
     char **mon_argv[numMonitors];
     int mon_argc[numMonitors];
@@ -276,7 +276,7 @@ int main(int argc, char *argv[]){
             execv("./monitorServer", mon_argv[i]);
             exit(1);
         }else{
-            pids[i] = pid;
+            //pids[i] = pid;
         }
     }
 
@@ -290,10 +290,11 @@ int main(int argc, char *argv[]){
         addr[i].sin_port = htons(ports[i]);
         addr[i].sin_addr.s_addr = locIP->s_addr;
 
-        if (connect(sockfd[i], (struct sockaddr *)&addr, sizeof(addr)) < 0){
-            perror("connect");
-            exit(EXIT_FAILURE);
-        }
+        int connected;
+
+        do{
+            connected = connect(sockfd[i], (struct sockaddr *)&addr, sizeof(addr));
+        }while(connected < 0);
     }
 
     struct pollfd *pfds;
@@ -314,13 +315,14 @@ int main(int argc, char *argv[]){
 
     while(num_open_fds > 0){
         int ready = poll(pfds, nfds, -1);
+        printf("ready = %d\n", ready);
 
         if(ready == -1){
             perror("poll error\n");
             exit(1);
         }
 
-        for(int i = 0; i < num_open_fds; i++){
+        for(int i = 0; i < numMonitors; i++){
             if(pfds[i].revents != 0){
                 if(pfds[i].revents & POLLIN){
                     char buff[socketBufferSize];
@@ -331,16 +333,13 @@ int main(int argc, char *argv[]){
                         perror("Error in read");
                         exit(1);
                     }else if(bytes_read == 0){
+                        printf("continuing...\n");
                         continue;
                     }
 
                     printf("Read %s from fd %d\n", buff, pfds[i].fd);
 
                 }else{
-                    if(close(pfds[i].fd)){
-                        perror("close error\n");
-                        exit(1);
-                    }
                     pfds[i].fd = -1; //Ignore events on next call
                     num_open_fds--;
                 }

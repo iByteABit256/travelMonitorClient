@@ -32,6 +32,7 @@ Listptr parseParameters(int argc, char *argv[], int *port, int *numThreads, int 
     int threadnum = -1;
 
     int isOption[argc];
+    memset(isOption, 0, sizeof(int)*argc);
 
     if(argc > 1){
         for(int i = 1; i < argc; i++){
@@ -189,8 +190,6 @@ int main(int argc, char *argv[]){
 
     filepaths = parseParameters(argc, argv, &port, &numThreads, &socketBufferSize, &cyclicBufferSize, &sizeOfBloom);
 
-    sleep(getpid()%3+1);
-
     printf("PID: %d\n\
             port: %d\n\
             numThreads: %d\n\
@@ -232,19 +231,28 @@ int main(int argc, char *argv[]){
     int new_socket;
     socklen_t addr_length = sizeof(addr);
     
-    while(1){
-        if((new_socket = accept(sockfd, (struct sockaddr *)&addr, &addr_length) < 0)){
-            perror("accept");
-            exit(EXIT_FAILURE);
-        }
+    //while(1){
+        // if((new_socket = accept(sockfd, (struct sockaddr *)&addr, &addr_length) < 0)){
+        //     //continue;
+        //     perror("accept");
+        //     exit(EXIT_FAILURE);
+        // }
+        do{
+            new_socket = accept(sockfd, (struct sockaddr *)&addr, &addr_length);
+        }while(new_socket < 0);
 
         char buff[socketBufferSize];
+        memset(buff, 0, socketBufferSize);
         strcpy(buff, "Hello!\n");
 
-        send(new_socket, buff, socketBufferSize, 0);
+        write(new_socket, buff, socketBufferSize);
 
         printf("Wrote %s\n", buff);
-    }
+
+        //close(new_socket);
+
+        //break;
+    //}
 
     // Listptr countryPaths = ListCreate();
 
