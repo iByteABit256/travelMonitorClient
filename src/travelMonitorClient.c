@@ -20,7 +20,7 @@
 
 #define INITIAL_BUFFSIZE 100
 #define MAX_LINE 100
-#define S_PORT 4000
+#define S_PORT 5050
 
 
 // String compare function wrapper
@@ -148,7 +148,7 @@ int main(int argc, char *argv[]){
 
     int ports[numMonitors];
     for(int i = 0; i < numMonitors; i++){
-        ports[i] = S_PORT+i;
+        ports[i] = S_PORT+i*1000;
     }
 
     struct sockaddr_in addr[numMonitors];
@@ -281,10 +281,14 @@ int main(int argc, char *argv[]){
     }
 
     for(int i = 0; i < numMonitors; i++){
-        if ((sockfd[i] = socket(AF_INET, SOCK_STREAM, 0)) == 0){
+        if((sockfd[i] = socket(AF_INET, SOCK_STREAM, 0)) < 0){
             perror("socket failed");
             exit(EXIT_FAILURE);
         }
+
+        int flags = fcntl(sockfd[i], F_GETFL, 0);
+        flags &= ~O_NONBLOCK;
+        fcntl(sockfd[i], F_SETFL, flags);
 
         addr[i].sin_family = AF_INET;
         addr[i].sin_port = htons(ports[i]);
@@ -294,7 +298,12 @@ int main(int argc, char *argv[]){
 
         do{
             connected = connect(sockfd[i], (struct sockaddr *)&addr, sizeof(addr));
+            if(connected < 0){
+                perror("connect");
+            }
         }while(connected < 0);
+
+        printf("Monitor %d connected with file descriptor: %d\n", i, sockfd[i]);
     }
 
     struct pollfd *pfds;
@@ -304,7 +313,7 @@ int main(int argc, char *argv[]){
 
     pfds = calloc(nfds, sizeof(struct pollfd));    
     if(pfds == NULL){
-        perror("calloc error\n");
+        perror("calloc error");
         exit(1);
     }
 
@@ -315,7 +324,7 @@ int main(int argc, char *argv[]){
 
     while(num_open_fds > 0){
         int ready = poll(pfds, nfds, -1);
-        printf("ready = %d\n", ready);
+        //printf("ready = %d\n", ready);
 
         if(ready == -1){
             perror("poll error\n");
@@ -326,21 +335,36 @@ int main(int argc, char *argv[]){
             if(pfds[i].revents != 0){
                 if(pfds[i].revents & POLLIN){
                     char buff[socketBufferSize];
+                    memset(buff, 0, socketBufferSize);
 
-                    int bytes_read = read(pfds[i].fd, buff, socketBufferSize);
+                    int bytes_read = recv(pfds[i].fd, buff, socketBufferSize, 0);
 
                     if(bytes_read == -1){
                         perror("Error in read");
+                        //continue;
                         exit(1);
                     }else if(bytes_read == 0){
                         printf("continuing...\n");
                         continue;
                     }
 
-                    printf("Read %s from fd %d\n", buff, pfds[i].fd);
+                    printf("Parent - Read %s from fd %d\n", buff, pfds[i].fd);
+
+                    if(!strcmp(buff, "Done!\n")){
+                        strcpy(buff, "bye!\n");
+                        printf("Parent - Writing %s to fd %d\n", buff, pfds[i].fd);
+                        send(pfds[i].fd, buff, socketBufferSize, 0);
+
+                        pfds[i].fd = -2; //Ignore events on next call
+                        num_open_fds--; 
+                    }
 
                 }else{
-                    pfds[i].fd = -1; //Ignore events on next call
+                    // if(close(pfds[i].fd)){
+                    //     perror("close error\n");
+                    //     exit(1);
+                    // }
+                    pfds[i].fd = -2; //Ignore events on next call
                     num_open_fds--;
                 }
             }

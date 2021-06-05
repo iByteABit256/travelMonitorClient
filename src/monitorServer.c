@@ -56,7 +56,7 @@ Listptr parseParameters(int argc, char *argv[], int *port, int *numThreads, int 
 
     // Find last "-x [xVal]" option in order to find beggining of file paths
     int lastOption = -1;
-    for(int i = argc; i >= 0; i--){
+    for(int i = argc-1; i >= 0; i--){
         if(isOption[i]){
             lastOption = i;
             break;
@@ -201,9 +201,15 @@ int main(int argc, char *argv[]){
     
     int sockfd;
 
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == 0){
+    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
         perror("socket failed");
         exit(EXIT_FAILURE);
+    }
+
+    int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
+
+    if (status == -1){
+        perror("calling fcntl");
     }
 
     struct sockaddr_in addr;
@@ -218,12 +224,19 @@ int main(int argc, char *argv[]){
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = locIP->s_addr;
 
-    if (bind(sockfd, (struct sockaddr *)&addr, sizeof(addr))<0){
+    // int opt = 1;
+
+    // if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))){
+    //     perror("setsockopt");
+    //     exit(EXIT_FAILURE);
+    // }
+
+    if(bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0){
         perror("bind");
         exit(EXIT_FAILURE);
     }
 
-    if (listen(sockfd, MAX_CONNECTIONS) < 0){
+    if(listen(sockfd, MAX_CONNECTIONS) < 0){
         perror("listen");
         exit(EXIT_FAILURE);
     }
@@ -231,28 +244,60 @@ int main(int argc, char *argv[]){
     int new_socket;
     socklen_t addr_length = sizeof(addr);
     
-    //while(1){
+    while(1){
         // if((new_socket = accept(sockfd, (struct sockaddr *)&addr, &addr_length) < 0)){
         //     //continue;
-        //     perror("accept");
+        //     perror( "accept");
         //     exit(EXIT_FAILURE);
         // }
         do{
             new_socket = accept(sockfd, (struct sockaddr *)&addr, &addr_length);
+            if(new_socket < 0){
+                perror("accept");
+            }
         }while(new_socket < 0);
+
+        printf("Monitor with pid %d accepted connection with sockfd %d and new socket %d\n", getpid(), sockfd, new_socket);
 
         char buff[socketBufferSize];
         memset(buff, 0, socketBufferSize);
         strcpy(buff, "Hello!\n");
 
-        write(new_socket, buff, socketBufferSize);
+        send(new_socket, buff, socketBufferSize, 0);
 
-        printf("Wrote %s\n", buff);
+        printf("Child - Wrote %s\n", buff);
+
+        strcpy(buff, "Woooo!\n");
+        send(new_socket, buff, socketBufferSize, 0);
+
+        printf("Child - Wrote %s\n", buff);
+
+        strcpy(buff, "Done!\n");
+        send(new_socket, buff, socketBufferSize, 0);
+
+        printf("Child - Wrote %s\n", buff);
+
+        // strcpy(buff, "Done2!\n");
+        // send(new_socket, buff, socketBufferSize, 0);
+
+        // printf("Child - Wrote %s\n", buff);
+
+        memset(buff, 0, socketBufferSize);
+
+        int bytes_read = 0;
+        do{
+            bytes_read = recv(new_socket, buff, socketBufferSize, 0);
+            //printf("Read %d bytes -> %s\n", bytes_read, buff);
+        }while(bytes_read <= 0 || strcmp(buff, "bye!\n"));
+
+        printf("Child - Read %s and exiting\n", buff);
 
         //close(new_socket);
 
-        //break;
-    //}
+        //close(new_socket);
+
+        break;
+    }
 
     // Listptr countryPaths = ListCreate();
 
