@@ -133,7 +133,7 @@ int main(int argc, char *argv[]){
     parseExecutableParameters(argc, argv, &numMonitors, &socketBufferSize, &cyclicBufferSize, &sizeOfBloom, &input_dir, &numThreads);
 
     if(socketBufferSize < 64){
-        fprintf(stderr, "Buffer size must be at least 64 bytes\n");
+        fprintf(stderr, "buff size must be at least 64 bytes\n");
         return 1;
     }
   
@@ -272,7 +272,7 @@ int main(int argc, char *argv[]){
     }
 
     int sockfd[numMonitors];
-	struct sockaddr_in serv_addr[numMonitors];
+	struct sockaddr_in addr[numMonitors];
 
     char hostname[HOST_NAME_MAX];
     gethostname(hostname, HOST_NAME_MAX);
@@ -282,124 +282,82 @@ int main(int argc, char *argv[]){
 
     for(int i = 0; i < numMonitors; i++){
 
-    	if ((sockfd[i] = socket(AF_INET, SOCK_STREAM, 0)) < 0)
-    	{
+    	if((sockfd[i] = socket(AF_INET, SOCK_STREAM, 0)) < 0){
      	    printf("\n Socket creation error \n");
     	    return -1;
    	 	}
    
-    	serv_addr[i].sin_family = AF_INET;
-    	serv_addr[i].sin_port = htons(ports[i]);
-        serv_addr[i].sin_addr.s_addr = locIP->s_addr;
+    	addr[i].sin_family = AF_INET;
+    	addr[i].sin_port = htons(ports[i]);
+        addr[i].sin_addr.s_addr = locIP->s_addr;
    		
-    	while (connect(sockfd[i], (struct sockaddr *)&serv_addr[i], sizeof(serv_addr[i])) < 0)
-    	{
-    	    printf("\nConnection Failed \n");
-     	    //return -1;
-    	}
+    	while(connect(sockfd[i], (struct sockaddr *)&addr[i], sizeof(addr[i])) < 0){}
 	}
 
-    int valread;
-    char *hello = "Hello from client";
-    char buffer[socketBufferSize];
-    memset(buffer, 0, socketBufferSize);
+    struct pollfd *pfds;
+    int num_open_fds, nfds;
 
-    send(sockfd[0], hello , strlen(hello), 0 );
-    printf("Hello message sent\n");
-    valread = read( sockfd[0] , buffer, socketBufferSize);
-    printf("%s\n",buffer );
+    num_open_fds = nfds = numMonitors;
 
-	send(sockfd[1], hello , strlen(hello), 0 );
-    printf("Hello message sent\n");
-    valread = read( sockfd[1] , buffer, socketBufferSize);
-    printf("%s\n",buffer );
+    pfds = calloc(nfds, sizeof(struct pollfd));    
+    if(pfds == NULL){
+        perror("calloc error");
+        exit(1);
+    }
 
-	send(sockfd[2], hello , strlen(hello), 0 );
-    printf("Hello message sent\n");
-    valread = read( sockfd[2] , buffer, socketBufferSize);
-    printf("%s\n",buffer );
+    for(int i = 0; i < numMonitors; i++){
+        pfds[i].fd = sockfd[i];
+        pfds[i].events = POLLIN;
+    }
 
-    // struct pollfd *pfds;
-    // int num_open_fds, nfds;
+    while(num_open_fds > 0){
+        int ready = poll(pfds, nfds, -1);
+        //printf("ready = %d\n", ready);
 
-    // num_open_fds = nfds = numMonitors;
+        if(ready == -1){
+            perror("poll error\n");
+            exit(1);
+        }
 
-    // pfds = calloc(nfds, sizeof(struct pollfd));    
-    // if(pfds == NULL){
-    //     perror("calloc error");
-    //     exit(1);
-    // }
+        for(int i = 0; i < numMonitors; i++){
+            if(pfds[i].revents != 0){
+                if(pfds[i].revents & POLLIN){
+                    char buff[socketBufferSize];
+                    memset(buff, 0, socketBufferSize);
 
-    // for(int i = 0; i < numMonitors; i++){
-    //     // pfds[i].fd = sockfd[i];
-    //     // pfds[i].events = POLLIN;
-    //     char buff[socketBufferSize];
-    //     memset(buff, 0, socketBufferSize);
+                    int bytes_read = recv(pfds[i].fd, buff, socketBufferSize, 0);
 
-    //     int bytes_read = recv(sockfd[i], buff, socketBufferSize, 0);
+                    if(bytes_read == -1){
+                        perror("Error in read");
+                        //continue;
+                        exit(1);
+                    }else if(bytes_read == 0){
+                        printf("continuing...\n");
+                        continue;
+                    }
 
-    //     if(bytes_read == -1){
-    //         perror("Error in read");
-    //         //continue;
-    //         exit(1);
-    //     }else if(bytes_read == 0){
-    //         printf("continuing...\n");
-    //         i--;
-    //         continue;
-    //     }
+                    printf("Parent - Read %s from fd %d\n", buff, pfds[i].fd);
 
-    //     printf("Parent - Read %s from fd %d\n", buff, sockfd[i]);
+                    if(!strcmp(buff, "Done!\n")){
+                        strcpy(buff, "bye!\n");
+                        printf("Parent - Writing %s to fd %d\n", buff, pfds[i].fd);
+                        send(pfds[i].fd, buff, socketBufferSize, 0);
 
-    // }
+                        pfds[i].fd = -2; //Ignore events on next call
+                        num_open_fds--; 
+                    }
 
-    // while(num_open_fds > 0){
-    //     int ready = poll(pfds, nfds, -1);
-    //     //printf("ready = %d\n", ready);
-
-    //     if(ready == -1){
-    //         perror("poll error\n");
-    //         exit(1);
-    //     }
-
-    //     for(int i = 0; i < numMonitors; i++){
-    //         if(pfds[i].revents != 0){
-    //             if(pfds[i].revents & POLLIN){
-    //                 char buff[socketBufferSize];
-    //                 memset(buff, 0, socketBufferSize);
-
-    //                 int bytes_read = recv(pfds[i].fd, buff, socketBufferSize, 0);
-
-    //                 if(bytes_read == -1){
-    //                     perror("Error in read");
-    //                     //continue;
-    //                     exit(1);
-    //                 }else if(bytes_read == 0){
-    //                     printf("continuing...\n");
-    //                     continue;
-    //                 }
-
-    //                 printf("Parent - Read %s from fd %d\n", buff, pfds[i].fd);
-
-    //                 if(!strcmp(buff, "Done!\n")){
-    //                     strcpy(buff, "bye!\n");
-    //                     printf("Parent - Writing %s to fd %d\n", buff, pfds[i].fd);
-    //                     send(pfds[i].fd, buff, socketBufferSize, 0);
-
-    //                     pfds[i].fd = -2; //Ignore events on next call
-    //                     num_open_fds--; 
-    //                 }
-
-    //             }else{
-    //                 // if(close(pfds[i].fd)){
-    //                 //     perror("close error\n");
-    //                 //     exit(1);
-    //                 // }
-    //                 pfds[i].fd = -2; //Ignore events on next call
-    //                 num_open_fds--;
-    //             }
-    //         }
-    //     }
-    // }
+                }else{
+                    // if(close(pfds[i].fd)){
+                    //     perror("close error\n");
+                    //     exit(1);
+                    // }
+                    pfds[i].fd = -2; //Ignore events on next call
+                    num_open_fds--;
+                }
+            }
+        }
+    }
 
     return 0;
 }

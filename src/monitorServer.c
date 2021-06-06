@@ -200,92 +200,68 @@ int main(int argc, char *argv[]){
             filepaths: %p\n", getpid(), port, numThreads, sizeOfBloom, socketBufferSize, cyclicBufferSize, filepaths);
 
 
-    int server_fd, new_socket, valread;
-    struct sockaddr_in address;
+    int sockfd, new_socket;
+    struct sockaddr_in addr;
     int opt = 1;
-    int addrlen = sizeof(address);
+    int addrlen = sizeof(addr);
     char buffer[socketBufferSize];
     memset(buffer, 0, socketBufferSize);
     char *hello = "Hello from server";
-       
-    // Creating socket file descriptor
-    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+    
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
     {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
-       
-    // // Forcefully attaching socket to the port 8080
-    // if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
-    //                                               &opt, sizeof(opt)))
-    // {
-    //     perror("setsockopt");
-    //     exit(EXIT_FAILURE);
-    // }
+
     char hostname[HOST_NAME_MAX];
     gethostname(hostname, HOST_NAME_MAX);
 
     struct hostent *ent = gethostbyname(hostname);
     struct in_addr *locIP = (struct in_addr *)ent->h_addr_list[0];
 
-    address.sin_family = AF_INET;
-    address.sin_port = htons(port);
-    address.sin_addr.s_addr = locIP->s_addr;
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+    addr.sin_addr.s_addr = locIP->s_addr;
        
-    // Forcefully attaching socket to the port 8080
-    if (bind(server_fd, (struct sockaddr *)&address, 
-                                 sizeof(address))<0)
-    {
+    if(bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0){
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
 
-    if (listen(server_fd, MAX_CONNECTIONS) < 0)
-    {
+    if(listen(sockfd, MAX_CONNECTIONS) < 0){
         perror("listen");
         exit(EXIT_FAILURE);
     }
 
-    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, 
-                       (socklen_t*)&addrlen))<0)
-    {
+    if((new_socket = accept(sockfd, (struct sockaddr *)&addr, (socklen_t*)&addrlen)) < 0){
         perror("accept");
         exit(EXIT_FAILURE);
     }
 
-    valread = read( new_socket , buffer, socketBufferSize);
-    printf("%s\n",buffer );
-    send(new_socket , hello , strlen(hello) , 0 );
-    printf("Hello message sent\n");
+    char buff[socketBufferSize];
+    memset(buff, 0, socketBufferSize);
+    strcpy(buff, "Hello!\n");
 
+    send(new_socket, buff, socketBufferSize, 0);
 
-    // char buff[socketBufferSize];
-    // memset(buff, 0, socketBufferSize);
-    // strcpy(buff, "Hello!\n");
+    printf("Child - Wrote %s\n", buff);
 
-    // send(new_socket, buff, socketBufferSize, 0);
+    strcpy(buff, "Done!\n");
+    send(new_socket, buff, socketBufferSize, 0);
 
-    // printf("Child - Wrote %s\n", buff);
+    printf("Child - Wrote %s\n", buff);
 
-    // strcpy(buff, "Done!\n");
-    // send(new_socket, buff, socketBufferSize, 0);
+    memset(buff, 0, socketBufferSize);
 
-    // printf("Child - Wrote %s\n", buff);
+    int bytes_read = 0;
+    do{
+        bytes_read = recv(new_socket, buff, socketBufferSize, 0);
+    }while(bytes_read <= 0 || strcmp(buff, "bye!\n"));
 
-    // memset(buff, 0, socketBufferSize);
+    printf("Child - Read %s and exiting\n", buff);
 
-    // int bytes_read = 0;
-    // do{
-    //     bytes_read = recv(new_socket, buff, socketBufferSize, 0);
-    //     //printf("Read %d bytes -> %s\n", bytes_read, buff);
-    // }while(bytes_read <= 0 || strcmp(buff, "bye!\n"));
-
-    // printf("Child - Read %s and exiting\n", buff);
-
-    //close(new_socket);
-
-    //close(new_socket);
-
+    close(new_socket);
 
     // Listptr countryPaths = ListCreate();
 
