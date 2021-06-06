@@ -20,7 +20,7 @@
 
 #define INITIAL_BUFFSIZE 100
 #define MAX_LINE 100
-#define S_PORT 5050
+#define S_PORT 8080
 
 
 // String compare function wrapper
@@ -140,19 +140,10 @@ int main(int argc, char *argv[]){
     // Logfile path
     char *logPath = "./logs/log_file.";
 
-    char hostname[HOST_NAME_MAX];
-    gethostname(hostname, HOST_NAME_MAX);
-
-    struct hostent *ent = gethostbyname(hostname);
-    struct in_addr *locIP = (struct in_addr *)ent->h_addr_list[0];
-
     int ports[numMonitors];
     for(int i = 0; i < numMonitors; i++){
-        ports[i] = S_PORT+i*1000;
+        ports[i] = S_PORT+i;
     }
-
-    struct sockaddr_in addr[numMonitors];
-    int sockfd[numMonitors];
 
     //pid_t pids[numMonitors];
     
@@ -280,96 +271,135 @@ int main(int argc, char *argv[]){
         }
     }
 
-    for(int i = 0; i < numMonitors; i++){
-        if((sockfd[i] = socket(AF_INET, SOCK_STREAM, 0)) < 0){
-            perror("socket failed");
-            exit(EXIT_FAILURE);
-        }
+    int sockfd[numMonitors];
+	struct sockaddr_in serv_addr[numMonitors];
 
-        // int flags = fcntl(sockfd[i], F_GETFL, 0);
-        // flags &= ~O_NONBLOCK;
-        // fcntl(sockfd[i], F_SETFL, flags);
+    char hostname[HOST_NAME_MAX];
+    gethostname(hostname, HOST_NAME_MAX);
 
-        addr[i].sin_family = AF_INET;
-        addr[i].sin_port = htons(ports[i]);
-        addr[i].sin_addr.s_addr = locIP->s_addr;
-
-        int connected;
-
-        do{
-            connected = connect(sockfd[i], (struct sockaddr *)&addr, sizeof(addr));
-            if(connected < 0){
-                perror("connect");
-            }
-        }while(connected < 0);
-
-        printf("Monitor %d connected with file descriptor: %d\n", i, sockfd[i]);
-    }
-
-    struct pollfd *pfds;
-    int num_open_fds, nfds;
-
-    num_open_fds = nfds = numMonitors;
-
-    pfds = calloc(nfds, sizeof(struct pollfd));    
-    if(pfds == NULL){
-        perror("calloc error");
-        exit(1);
-    }
+    struct hostent *ent = gethostbyname(hostname);
+    struct in_addr *locIP = (struct in_addr *)ent->h_addr_list[0];
 
     for(int i = 0; i < numMonitors; i++){
-        pfds[i].fd = sockfd[i];
-        pfds[i].events = POLLIN;
-    }
 
-    while(num_open_fds > 0){
-        int ready = poll(pfds, nfds, -1);
-        //printf("ready = %d\n", ready);
+    	if ((sockfd[i] = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    	{
+     	    printf("\n Socket creation error \n");
+    	    return -1;
+   	 	}
+   
+    	serv_addr[i].sin_family = AF_INET;
+    	serv_addr[i].sin_port = htons(ports[i]);
+        serv_addr[i].sin_addr.s_addr = locIP->s_addr;
+   		
+    	while (connect(sockfd[i], (struct sockaddr *)&serv_addr[i], sizeof(serv_addr[i])) < 0)
+    	{
+    	    printf("\nConnection Failed \n");
+     	    //return -1;
+    	}
+	}
 
-        if(ready == -1){
-            perror("poll error\n");
-            exit(1);
-        }
+    int valread;
+    char *hello = "Hello from client";
+    char buffer[socketBufferSize];
+    memset(buffer, 0, socketBufferSize);
 
-        for(int i = 0; i < numMonitors; i++){
-            if(pfds[i].revents != 0){
-                if(pfds[i].revents & POLLIN){
-                    char buff[socketBufferSize];
-                    memset(buff, 0, socketBufferSize);
+    send(sockfd[0], hello , strlen(hello), 0 );
+    printf("Hello message sent\n");
+    valread = read( sockfd[0] , buffer, socketBufferSize);
+    printf("%s\n",buffer );
 
-                    int bytes_read = recv(pfds[i].fd, buff, socketBufferSize, 0);
+	send(sockfd[1], hello , strlen(hello), 0 );
+    printf("Hello message sent\n");
+    valread = read( sockfd[1] , buffer, socketBufferSize);
+    printf("%s\n",buffer );
 
-                    if(bytes_read == -1){
-                        perror("Error in read");
-                        //continue;
-                        exit(1);
-                    }else if(bytes_read == 0){
-                        printf("continuing...\n");
-                        continue;
-                    }
+	send(sockfd[2], hello , strlen(hello), 0 );
+    printf("Hello message sent\n");
+    valread = read( sockfd[2] , buffer, socketBufferSize);
+    printf("%s\n",buffer );
 
-                    printf("Parent - Read %s from fd %d\n", buff, pfds[i].fd);
+    // struct pollfd *pfds;
+    // int num_open_fds, nfds;
 
-                    if(!strcmp(buff, "Done!\n")){
-                        strcpy(buff, "bye!\n");
-                        printf("Parent - Writing %s to fd %d\n", buff, pfds[i].fd);
-                        send(pfds[i].fd, buff, socketBufferSize, 0);
+    // num_open_fds = nfds = numMonitors;
 
-                        pfds[i].fd = -2; //Ignore events on next call
-                        num_open_fds--; 
-                    }
+    // pfds = calloc(nfds, sizeof(struct pollfd));    
+    // if(pfds == NULL){
+    //     perror("calloc error");
+    //     exit(1);
+    // }
 
-                }else{
-                    // if(close(pfds[i].fd)){
-                    //     perror("close error\n");
-                    //     exit(1);
-                    // }
-                    pfds[i].fd = -2; //Ignore events on next call
-                    num_open_fds--;
-                }
-            }
-        }
-    }
+    // for(int i = 0; i < numMonitors; i++){
+    //     // pfds[i].fd = sockfd[i];
+    //     // pfds[i].events = POLLIN;
+    //     char buff[socketBufferSize];
+    //     memset(buff, 0, socketBufferSize);
+
+    //     int bytes_read = recv(sockfd[i], buff, socketBufferSize, 0);
+
+    //     if(bytes_read == -1){
+    //         perror("Error in read");
+    //         //continue;
+    //         exit(1);
+    //     }else if(bytes_read == 0){
+    //         printf("continuing...\n");
+    //         i--;
+    //         continue;
+    //     }
+
+    //     printf("Parent - Read %s from fd %d\n", buff, sockfd[i]);
+
+    // }
+
+    // while(num_open_fds > 0){
+    //     int ready = poll(pfds, nfds, -1);
+    //     //printf("ready = %d\n", ready);
+
+    //     if(ready == -1){
+    //         perror("poll error\n");
+    //         exit(1);
+    //     }
+
+    //     for(int i = 0; i < numMonitors; i++){
+    //         if(pfds[i].revents != 0){
+    //             if(pfds[i].revents & POLLIN){
+    //                 char buff[socketBufferSize];
+    //                 memset(buff, 0, socketBufferSize);
+
+    //                 int bytes_read = recv(pfds[i].fd, buff, socketBufferSize, 0);
+
+    //                 if(bytes_read == -1){
+    //                     perror("Error in read");
+    //                     //continue;
+    //                     exit(1);
+    //                 }else if(bytes_read == 0){
+    //                     printf("continuing...\n");
+    //                     continue;
+    //                 }
+
+    //                 printf("Parent - Read %s from fd %d\n", buff, pfds[i].fd);
+
+    //                 if(!strcmp(buff, "Done!\n")){
+    //                     strcpy(buff, "bye!\n");
+    //                     printf("Parent - Writing %s to fd %d\n", buff, pfds[i].fd);
+    //                     send(pfds[i].fd, buff, socketBufferSize, 0);
+
+    //                     pfds[i].fd = -2; //Ignore events on next call
+    //                     num_open_fds--; 
+    //                 }
+
+    //             }else{
+    //                 // if(close(pfds[i].fd)){
+    //                 //     perror("close error\n");
+    //                 //     exit(1);
+    //                 // }
+    //                 pfds[i].fd = -2; //Ignore events on next call
+    //                 num_open_fds--;
+    //             }
+    //         }
+    //     }
+    // }
 
     return 0;
 }

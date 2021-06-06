@@ -1,3 +1,4 @@
+#include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +19,7 @@
 #include "../src/vaccineMonitor.h"
 
 #define INITIAL_BUFFSIZE 100
-#define MAX_CONNECTIONS 1
+#define MAX_CONNECTIONS 3
 
 
 // Parses parameters of executable
@@ -198,91 +199,93 @@ int main(int argc, char *argv[]){
             cyclicBufferSize: %d\n\
             filepaths: %p\n", getpid(), port, numThreads, sizeOfBloom, socketBufferSize, cyclicBufferSize, filepaths);
 
-    
-    int sockfd;
 
-    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0){
+    int server_fd, new_socket, valread;
+    struct sockaddr_in address;
+    int opt = 1;
+    int addrlen = sizeof(address);
+    char buffer[socketBufferSize];
+    memset(buffer, 0, socketBufferSize);
+    char *hello = "Hello from server";
+       
+    // Creating socket file descriptor
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
+    {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
-
-    // int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
-
-    // if (status == -1){
-    //     perror("calling fcntl");
+       
+    // // Forcefully attaching socket to the port 8080
+    // if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT,
+    //                                               &opt, sizeof(opt)))
+    // {
+    //     perror("setsockopt");
+    //     exit(EXIT_FAILURE);
     // }
-
-    struct sockaddr_in addr;
-
     char hostname[HOST_NAME_MAX];
     gethostname(hostname, HOST_NAME_MAX);
 
     struct hostent *ent = gethostbyname(hostname);
     struct in_addr *locIP = (struct in_addr *)ent->h_addr_list[0];
 
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = locIP->s_addr;
-
-    // int opt = 1;
-
-    // if(setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))){
-    //     perror("setsockopt");
-    //     exit(EXIT_FAILURE);
-    // }
-
-    if(bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0){
-        perror("bind");
+    address.sin_family = AF_INET;
+    address.sin_port = htons(port);
+    address.sin_addr.s_addr = locIP->s_addr;
+       
+    // Forcefully attaching socket to the port 8080
+    if (bind(server_fd, (struct sockaddr *)&address, 
+                                 sizeof(address))<0)
+    {
+        perror("bind failed");
         exit(EXIT_FAILURE);
     }
 
-    if(listen(sockfd, MAX_CONNECTIONS) < 0){
+    if (listen(server_fd, MAX_CONNECTIONS) < 0)
+    {
         perror("listen");
         exit(EXIT_FAILURE);
     }
 
-    int new_socket;
-    socklen_t addr_length = sizeof(addr);
-    
-    while(1){
-        do{
-            new_socket = accept(sockfd, (struct sockaddr *)&addr, &addr_length);
-            if(new_socket < 0){
-                perror("accept");
-            }
-        }while(new_socket < 0);
-
-        printf("Monitor with pid %d accepted connection with sockfd %d and new socket %d\n", getpid(), sockfd, new_socket);
-
-        char buff[socketBufferSize];
-        memset(buff, 0, socketBufferSize);
-        strcpy(buff, "Hello!\n");
-
-        send(new_socket, buff, socketBufferSize, 0);
-
-        printf("Child - Wrote %s\n", buff);
-
-        strcpy(buff, "Done!\n");
-        send(new_socket, buff, socketBufferSize, 0);
-
-        printf("Child - Wrote %s\n", buff);
-
-        memset(buff, 0, socketBufferSize);
-
-        int bytes_read = 0;
-        do{
-            bytes_read = recv(new_socket, buff, socketBufferSize, 0);
-            //printf("Read %d bytes -> %s\n", bytes_read, buff);
-        }while(bytes_read <= 0 || strcmp(buff, "bye!\n"));
-
-        printf("Child - Read %s and exiting\n", buff);
-
-        //close(new_socket);
-
-        //close(new_socket);
-
-        break;
+    if ((new_socket = accept(server_fd, (struct sockaddr *)&address, 
+                       (socklen_t*)&addrlen))<0)
+    {
+        perror("accept");
+        exit(EXIT_FAILURE);
     }
+
+    valread = read( new_socket , buffer, socketBufferSize);
+    printf("%s\n",buffer );
+    send(new_socket , hello , strlen(hello) , 0 );
+    printf("Hello message sent\n");
+
+
+    // char buff[socketBufferSize];
+    // memset(buff, 0, socketBufferSize);
+    // strcpy(buff, "Hello!\n");
+
+    // send(new_socket, buff, socketBufferSize, 0);
+
+    // printf("Child - Wrote %s\n", buff);
+
+    // strcpy(buff, "Done!\n");
+    // send(new_socket, buff, socketBufferSize, 0);
+
+    // printf("Child - Wrote %s\n", buff);
+
+    // memset(buff, 0, socketBufferSize);
+
+    // int bytes_read = 0;
+    // do{
+    //     bytes_read = recv(new_socket, buff, socketBufferSize, 0);
+    //     //printf("Read %d bytes -> %s\n", bytes_read, buff);
+    // }while(bytes_read <= 0 || strcmp(buff, "bye!\n"));
+
+    // printf("Child - Read %s and exiting\n", buff);
+
+    //close(new_socket);
+
+    //close(new_socket);
+
 
     // Listptr countryPaths = ListCreate();
 
