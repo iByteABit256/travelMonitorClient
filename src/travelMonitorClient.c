@@ -286,9 +286,9 @@ int main(int argc, char *argv[]){
             exit(EXIT_FAILURE);
         }
 
-        int flags = fcntl(sockfd[i], F_GETFL, 0);
-        flags &= ~O_NONBLOCK;
-        fcntl(sockfd[i], F_SETFL, flags);
+        // int flags = fcntl(sockfd[i], F_GETFL, 0);
+        // flags &= ~O_NONBLOCK;
+        // fcntl(sockfd[i], F_SETFL, flags);
 
         addr[i].sin_family = AF_INET;
         addr[i].sin_port = htons(ports[i]);

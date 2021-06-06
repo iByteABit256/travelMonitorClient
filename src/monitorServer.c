@@ -206,11 +206,11 @@ int main(int argc, char *argv[]){
         exit(EXIT_FAILURE);
     }
 
-    int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
+    // int status = fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) | O_NONBLOCK);
 
-    if (status == -1){
-        perror("calling fcntl");
-    }
+    // if (status == -1){
+    //     perror("calling fcntl");
+    // }
 
     struct sockaddr_in addr;
 
@@ -245,11 +245,6 @@ int main(int argc, char *argv[]){
     socklen_t addr_length = sizeof(addr);
     
     while(1){
-        // if((new_socket = accept(sockfd, (struct sockaddr *)&addr, &addr_length) < 0)){
-        //     //continue;
-        //     perror( "accept");
-        //     exit(EXIT_FAILURE);
-        // }
         do{
             new_socket = accept(sockfd, (struct sockaddr *)&addr, &addr_length);
             if(new_socket < 0){
@@ -267,20 +262,10 @@ int main(int argc, char *argv[]){
 
         printf("Child - Wrote %s\n", buff);
 
-        strcpy(buff, "Woooo!\n");
-        send(new_socket, buff, socketBufferSize, 0);
-
-        printf("Child - Wrote %s\n", buff);
-
         strcpy(buff, "Done!\n");
         send(new_socket, buff, socketBufferSize, 0);
 
         printf("Child - Wrote %s\n", buff);
-
-        // strcpy(buff, "Done2!\n");
-        // send(new_socket, buff, socketBufferSize, 0);
-
-        // printf("Child - Wrote %s\n", buff);
 
         memset(buff, 0, socketBufferSize);
 
