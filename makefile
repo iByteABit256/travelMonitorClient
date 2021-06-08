@@ -10,7 +10,7 @@ CFLAGS  = -ggdb3 -Wall
 LFLAGS =
 
 # libraries to link with
-LIBS =
+LIBS = -pthread
   
 # the name to use for both the target source file, and the output file:
 TARGET = travelMonitorClient
@@ -27,10 +27,10 @@ TARGET2 = monitorServer
 
 # source files
 SRC2 = src/monitorServer.c lib/lists/lists.c lib/hashtable/hashtable.c lib/bloomfilter/bloomfilter.c \
-	src/parser.c src/vaccineMonitor.c lib/skiplist/skiplist.c lib/date/date.c lib/hash/hash.c
+	src/parser.c src/vaccineMonitor.c lib/skiplist/skiplist.c lib/date/date.c lib/hash/hash.c lib/buffer/buffer.c
 
 # object files
-OBJ2 = monitorServer.o lists.o hashtable.o bloomfilter.o parser.o vaccineMonitor.o skiplist.o date.o hash.o
+OBJ2 = monitorServer.o lists.o hashtable.o bloomfilter.o parser.o vaccineMonitor.o skiplist.o date.o hash.o buffer.o
 
 # make all by default
 default: all
@@ -75,6 +75,9 @@ date.o: lib/date/date.c
 
 hash.o: lib/hash/hash.c
 	$(CC) $(CFLAGS) -c lib/hash/hash.c
+
+buffer.o: lib/buffer/buffer.c
+	$(CC) $(CFLAGS) -c lib/buffer/buffer.c
 
 # clean up
 clean:

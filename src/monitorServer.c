@@ -12,15 +12,44 @@
 #include <time.h>
 #include <dirent.h>
 #include <poll.h>
+#include <pthread.h>
 #include "../lib/lists/lists.h"
 #include "../lib/bloomfilter/bloomfilter.h"
 #include "../lib/hashtable/htInterface.h"
 #include "../src/parser.h"
 #include "../src/vaccineMonitor.h"
+#include "../lib/buffer/buffer.h"
 
 #define INITIAL_BUFFSIZE 100
 #define MAX_CONNECTIONS 3
 
+pthread_mutex_t lock;
+int file_count;
+
+
+// Thread function for file parsing
+void *parserThreadFunc(void *vargp){
+    Database db = vargp;
+
+    while(file_count > 0){
+
+        pthread_mutex_lock(&lock);
+
+        if(bufferEmpty(db->cyclicBuff, db->cyclicBufferSize)){
+            continue;
+        }
+
+        char *filepath = buffGetFirst(db->cyclicBuff, db->cyclicBufferSize);
+        parseInputFile(filepath, db->sizeOfBloom, db->persons, db->countries, db->viruses);
+        free(filepath);
+
+        file_count--;
+
+        pthread_mutex_unlock(&lock);
+    }
+
+    return db;
+}
 
 // Parses parameters of executable
 Listptr parseParameters(int argc, char *argv[], int *port, int *numThreads, int *socketBufferSize, int *cyclicBufferSize, int *sizeOfBloom){
@@ -187,9 +216,9 @@ int main(int argc, char *argv[]){
     int sizeOfBloom;
     int socketBufferSize;
     int cyclicBufferSize;
-    Listptr filepaths = NULL;
+    Listptr countryPaths = NULL;
 
-    filepaths = parseParameters(argc, argv, &port, &numThreads, &socketBufferSize, &cyclicBufferSize, &sizeOfBloom);
+    countryPaths = parseParameters(argc, argv, &port, &numThreads, &socketBufferSize, &cyclicBufferSize, &sizeOfBloom);
 
     printf("PID: %d\n\
             port: %d\n\
@@ -197,16 +226,15 @@ int main(int argc, char *argv[]){
             sizeofbloom: %d\n\
             socketBufferSize: %d\n\
             cyclicBufferSize: %d\n\
-            filepaths: %p\n", getpid(), port, numThreads, sizeOfBloom, socketBufferSize, cyclicBufferSize, filepaths);
+            filepaths: %p\n", getpid(), port, numThreads, sizeOfBloom, socketBufferSize, cyclicBufferSize, countryPaths);
 
 
     int sockfd, new_socket;
     struct sockaddr_in addr;
-    int opt = 1;
+    //int opt = 1;
     int addrlen = sizeof(addr);
     char buffer[socketBufferSize];
     memset(buffer, 0, socketBufferSize);
-    char *hello = "Hello from server";
     
     if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
     {
@@ -263,120 +291,87 @@ int main(int argc, char *argv[]){
 
     close(new_socket);
 
-    // Listptr countryPaths = ListCreate();
+    DIR *subdir;
+    struct dirent *direntp;
 
-    // fd = open(pipename, O_RDONLY);
-    // fd2 = open(pipename2, O_WRONLY);
+    // Traverse subdirectories and save file paths in list
 
-    // struct pollfd *pfds;
-    // int num_open_fds, nfds;
+    Listptr filepaths = ListCreate();
 
-    // num_open_fds = nfds = 1;
+    for(Listptr l = countryPaths->head->next; l != l->tail; l = l->next){
+        char *subdirName = l->value;
 
-    // pfds = calloc(nfds, sizeof(struct pollfd));    
-    // if(pfds == NULL){
-    //     perror("calloc error\n");
-    //     exit(1);
-    // }
+        if((subdir = opendir(subdirName)) == NULL){
+            fprintf(stderr, "Could not open %s\n", subdirName);
+        }else{     
+            while((direntp = readdir(subdir)) != NULL){
+                if(strcmp(direntp->d_name, ".") && strcmp(direntp->d_name, "..")){
+                    char *temp = malloc(socketBufferSize*100);
+                    strcpy(temp, subdirName);
+                    strcat(temp, "/");
+                    strcat(temp, direntp->d_name);
+                    ListInsertLast(filepaths, temp);
+                }
+            }
+            closedir(subdir);
+        }
+        free(subdirName);
+    }
 
-    // pfds[0].fd = fd;
-    // pfds[0].events = POLLIN;
+    ListDestroy(countryPaths);
 
-    // // Read buffersize, bloomsize and subdirectory paths from parent
+    Database db = malloc(sizeof(struct databasestr));
 
-    // int msgNum = 0;
-    // while(num_open_fds > 0){
-    //     int ready = poll(pfds, nfds, -1);
+    db->viruses = HTCreate();
+    db->persons = HTCreate();
+    db->countries = HTCreate();
 
-    //     if(ready == -1){
-    //         perror("poll error\n");
-    //         exit(1);
-    //     }
-
-    //     if(pfds[0].revents != 0){
-    //         if(pfds[0].revents & POLLIN){
-
-    //             int bytes_read = read(fd, buff, buffsize);
-
-    //             if(bytes_read == -1){
-    //                 perror("Error in read");
-    //                 exit(1);
-    //             }else if(bytes_read == 0){
-    //                 continue;
-    //             }
-
-    //             if(msgNum == 0){
-    //                 // First message
-
-    //                 buffsize = atoi(buff);
-    //             }else if(msgNum == 1){
-    //                 // Second message
-
-    //                 bloomsize = atoi(buff);
-    //             }else{
-    //                 // Subdirectory path
-
-    //                 char *country = malloc(strlen(buff)+1);
-    //                 strcpy(country, buff);
-    //                 ListInsertLast(countryPaths, country);
-    //             }
-
-    //             msgNum++;
-    //         }else{
-    //             if(close(pfds[0].fd)){
-    //                 perror("close error\n");
-    //                 exit(1);
-    //             }
-    //             pfds[0].fd = -1; //Ignore events on next call
-    //             num_open_fds--;
-    //         }
-    //     }
-    // }
-
-    // DIR *subdir;
-    // struct dirent *direntp;
-
-    // // Traverse subdirectories and save file paths in list
-
-    // Listptr filepaths = ListCreate();
-
-    // for(Listptr l = countryPaths->head->next; l != l->tail; l = l->next){
-    //     char *subdirName = l->value;
-
-    //     if((subdir = opendir(subdirName)) == NULL){
-    //         fprintf(stderr, "Could not open %s\n", subdirName);
-    //     }else{     
-    //         while((direntp = readdir(subdir)) != NULL){
-    //             if(strcmp(direntp->d_name, ".") && strcmp(direntp->d_name, "..")){
-    //                 char *temp = malloc(buffsize*10);
-    //                 strcpy(temp, subdirName);
-    //                 strcat(temp, "/");
-    //                 strcat(temp, direntp->d_name);
-    //                 ListInsertLast(filepaths, temp);
-    //             }
-    //         }
-    //         closedir(subdir);
-    //     }
-    //     free(subdirName);
-    // }
-
-    // ListDestroy(countryPaths);
-
-    // HTHash viruses = HTCreate();
-    // HTHash persons = HTCreate();
-    // HTHash countries = HTCreate();
+    char *cyclicBuff = malloc(cyclicBufferSize);
+    memset(cyclicBuff, 0, cyclicBufferSize);
     
-    // // Parse files
+    db->cyclicBuff = cyclicBuff;
+    db->cyclicBufferSize = cyclicBufferSize;
+    db->sizeOfBloom = sizeOfBloom;
 
-    // for(Listptr l = filepaths->head->next; l != l->tail; l = l->next){
-    //     char *filepath = l->value;
+    file_count = ListSize(filepaths);
 
-    //     parseInputFile(filepath, bloomsize, persons, countries, viruses);
+    // Parse files
 
-    //     free(filepath);
-    // }
+    if(pthread_mutex_init(&lock, NULL) != 0){
+        perror("mutex init");
+        exit(1);
+    }
 
-    // ListDestroy(filepaths);
+    pthread_t tid[numThreads];
+
+    for(int i = 0; i < numThreads; i++){
+        if(pthread_create(&tid[i], NULL, parserThreadFunc, db) != 0){
+            perror("pthread create");
+            exit(1);
+        }
+    }
+
+    while(ListSize(filepaths) > 0){
+        char *filepath = ListGetLast(filepaths)->value;
+        if(strFits(cyclicBuff, cyclicBufferSize, filepath)){
+            buffInsert(cyclicBuff, cyclicBufferSize, filepath);
+            ListDeleteLast(filepaths);
+        }
+    }
+
+    ListDestroy(filepaths);
+
+    for(int i = 0; i < numThreads; i++){
+        if(pthread_join(tid[i], NULL) != 0){
+            perror("pthread join");
+            exit(1);
+        }
+    }
+
+    if(pthread_mutex_destroy(&lock) != 0){
+        perror("mutex destroy");
+        exit(1);
+    }
 
     // // Send bloomfilters to parent
     //     // -First message is virus name
@@ -388,20 +383,20 @@ int main(int argc, char *argv[]){
     //         HTEntry ht = l->value;
     //         Virus v = ht->item;
 
-	// 		char *buff = malloc(sizeof(char)*buffsize);
-    //         memset(buff, 0, sizeof(char)*buffsize);
+	// 		char *buff = malloc(sizeof(char)*socketBufferSize);
+    //         memset(buff, 0, sizeof(char)*socketBufferSize);
     //         strcpy(buff, v->name);
 
-    //         write(fd2, buff, buffsize);
-    //         for(int i = 0; i <= bloomsize/buffsize; i++){
-    //             if(i == bloomsize/buffsize){
+    //         write(fd2, buff, socketBufferSize);
+    //         for(int i = 0; i <= sizeOfBloom/socketBufferSize; i++){
+    //             if(i == sizeOfBloom/socketBufferSize){
     //                 // Remaining part of bloomfilter
 
-    //                 memcpy(buff, v->vaccinated_bloom->bloom+i*buffsize, bloomsize%buffsize);
+    //                 memcpy(buff, v->vaccinated_bloom->bloom+i*socketBufferSize, sizeOfBloom%socketBufferSize);
     //             }else{
-    //                 memcpy(buff, v->vaccinated_bloom->bloom+i*buffsize, buffsize);
+    //                 memcpy(buff, v->vaccinated_bloom->bloom+i*socketBufferSize, socketBufferSize);
     //             }
-    //             write(fd2, buff, buffsize);
+    //             write(fd2, buff, socketBufferSize);
     //         }
     //         free(buff);
     //         count++;
@@ -420,20 +415,20 @@ int main(int argc, char *argv[]){
     // int rejected = 0;
 
     // while(1){
-    //     char buff[buffsize];
-    //     int bytes_read = read(fd, buff, buffsize);
+    //     char buff[socketBufferSize];
+    //     int bytes_read = read(fd, buff, socketBufferSize);
 
     //     if(bytes_read > 0){
 
     //         if(!strcmp(buff, "travelRequest")){
     //             totalRequests++;
 
-    //             bytes_read = read(fd, buff, buffsize);
+    //             bytes_read = read(fd, buff, socketBufferSize);
 
     //             char *id = malloc(strlen(buff)+1);
     //             strcpy(id, buff);
 
-    //             bytes_read = read(fd, buff, buffsize);
+    //             bytes_read = read(fd, buff, socketBufferSize);
 
     //             char *virName = malloc(strlen(buff)+1);
     //             strcpy(virName, buff);
@@ -447,16 +442,16 @@ int main(int argc, char *argv[]){
     //                 close(fd);
     //                 fd2 = open(pipename2, O_WRONLY);
     //                 strcpy(buff, "YES");
-    //                 write(fd2, buff, buffsize);
+    //                 write(fd2, buff, socketBufferSize);
     //                 strcpy(buff, "");
     //                 sprintf(buff, "%d", rec->date->day);
-    //                 write(fd2, buff, buffsize);
+    //                 write(fd2, buff, socketBufferSize);
     //                 strcpy(buff, "");
     //                 sprintf(buff, "%d", rec->date->month);
-    //                 write(fd2, buff, buffsize);
+    //                 write(fd2, buff, socketBufferSize);
     //                 strcpy(buff, "");
     //                 sprintf(buff, "%d", rec->date->year);
-    //                 write(fd2, buff, buffsize);
+    //                 write(fd2, buff, socketBufferSize);
     //                 close(fd2);
     //                 fd = open(pipename, O_RDONLY);
     //             }else{
@@ -464,7 +459,7 @@ int main(int argc, char *argv[]){
     //                 close(fd);
     //                 fd2 = open(pipename2, O_WRONLY);
     //                 strcpy(buff, "NO");
-    //                 write(fd2, buff, buffsize);
+    //                 write(fd2, buff, socketBufferSize);
     //                 close(fd2);
     //                 fd = open(pipename, O_RDONLY);
     //             }

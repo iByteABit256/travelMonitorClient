@@ -4,6 +4,18 @@
 #include "../lib/date/date.h"
 
 
+// Database
+struct databasestr{
+    HTHash viruses;
+    HTHash persons;
+    HTHash countries;
+    char *cyclicBuff;
+    int cyclicBufferSize;
+    int sizeOfBloom;
+};
+
+typedef struct databasestr *Database;
+
 // Virus
 struct virusstr{
     char *name;
