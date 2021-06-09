@@ -31,21 +31,29 @@ int file_count;
 void *parserThreadFunc(void *vargp){
     Database db = vargp;
 
-    printf("file count is %d\n", file_count);
-
-    while(file_count > 0){
+    while(1){
 
         printf("About to enter CS\n");
 
         pthread_mutex_lock(&lock);
 
+        printf("file count is %d\n", file_count);
+
+        if(file_count <= 0){
+            pthread_mutex_unlock(&lock);
+            break;
+        }
+
         if(bufferEmpty(db->cyclicBuff, db->cyclicBufferSize)){
+            pthread_mutex_unlock(&lock);
             continue;
         }
 
         char *filepath = buffGetLast(db->cyclicBuff, db->cyclicBufferSize);
         printf("parsing %s\n", filepath);
         parseInputFile(filepath, db->sizeOfBloom, db->persons, db->countries, db->viruses);
+        printf("parsed %s\n", filepath);
+
         free(filepath);
 
         file_count--;

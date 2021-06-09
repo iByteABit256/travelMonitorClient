@@ -78,7 +78,7 @@ char *buffGetLast(char *buff, int buffsize){
         }
     }
 
-    char *res = malloc(1);
+    char *res = NULL;
     int len = 0;
     
     for(int i = prev_del+1; i < last_del+1; i++){
@@ -87,10 +87,11 @@ char *buffGetLast(char *buff, int buffsize){
             break;
         }
 
-        res = realloc(res, ++len);
+        res = realloc(res, ++len+1);
         res[len-1] = buff[i];
         buff[i] = 0;
     }
+    res[len] = '\0';
 
     return res;
 }

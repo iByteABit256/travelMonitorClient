@@ -54,6 +54,10 @@ void parseExecutableParameters(int argc, char *argv[], char **fP, int *bS){
 void parseInputFile(char *filePath, int bloomSize, HTHash citizenRecords, HTHash countries, HTHash viruses){
 
     FILE *inputFile = fopen(filePath, "r");
+    if(inputFile == NULL){
+        fprintf(stderr, "ERROR: Could not open %s\n", filePath);
+        return;
+    }
 
     char *buf = malloc(MAX_LINE*sizeof(char));
     char *errLine = malloc(MAX_LINE*sizeof(char));
