@@ -31,7 +31,11 @@ int file_count;
 void *parserThreadFunc(void *vargp){
     Database db = vargp;
 
+    printf("file count is %d\n", file_count);
+
     while(file_count > 0){
+
+        printf("About to enter CS\n");
 
         pthread_mutex_lock(&lock);
 
@@ -39,14 +43,19 @@ void *parserThreadFunc(void *vargp){
             continue;
         }
 
-        char *filepath = buffGetFirst(db->cyclicBuff, db->cyclicBufferSize);
+        char *filepath = buffGetLast(db->cyclicBuff, db->cyclicBufferSize);
+        printf("parsing %s\n", filepath);
         parseInputFile(filepath, db->sizeOfBloom, db->persons, db->countries, db->viruses);
         free(filepath);
 
         file_count--;
 
+        printf("About to exit CS\n");
+
         pthread_mutex_unlock(&lock);
     }
+
+    printf("Thread done\n");
 
     return db;
 }
@@ -315,7 +324,6 @@ int main(int argc, char *argv[]){
             }
             closedir(subdir);
         }
-        free(subdirName);
     }
 
     ListDestroy(countryPaths);
@@ -344,6 +352,8 @@ int main(int argc, char *argv[]){
 
     pthread_t tid[numThreads];
 
+    printf("Mutex initialized\n");
+
     for(int i = 0; i < numThreads; i++){
         if(pthread_create(&tid[i], NULL, parserThreadFunc, db) != 0){
             perror("pthread create");
@@ -351,13 +361,18 @@ int main(int argc, char *argv[]){
         }
     }
 
+    printf("Threads created\n");
+
     while(ListSize(filepaths) > 0){
         char *filepath = ListGetLast(filepaths)->value;
         if(strFits(cyclicBuff, cyclicBufferSize, filepath)){
+            printf("adding %s to buff\n", filepath);
             buffInsert(cyclicBuff, cyclicBufferSize, filepath);
             ListDeleteLast(filepaths);
         }
     }
+
+    printf("All files added\n");
 
     ListDestroy(filepaths);
 
@@ -372,6 +387,10 @@ int main(int argc, char *argv[]){
         perror("mutex destroy");
         exit(1);
     }
+
+    printf("Threads joined and mutex detroyed\n");
+
+    popStatusByAge(HTGetItem(db->viruses, "COVID-19"), NULL, NULL, db->countries, NULL);
 
     // // Send bloomfilters to parent
     //     // -First message is virus name

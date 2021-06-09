@@ -20,7 +20,7 @@
 
 #define INITIAL_BUFFSIZE 100
 #define MAX_LINE 100
-#define S_PORT 8080
+#define S_PORT 4000
 
 
 // String compare function wrapper

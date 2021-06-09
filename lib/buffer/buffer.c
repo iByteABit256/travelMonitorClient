@@ -6,10 +6,10 @@
 int bufferEmpty(char *buff, int buffsize){
     for(int i = 0; i < buffsize; i++){
         if(buff[i] != 0){
-            return 1;
+            return 0;
         }
     }
-    return 0;
+    return 1;
 }
 
 // Gets last delimiter position in buffer
@@ -19,6 +19,7 @@ int getLastDel(char *buff, int buffsize){
     for(int i = buffsize-1; i >= 0; i--){
         if(buff[i] == '\n'){
             lastDel = i;
+            break;
         }
     }
 
@@ -32,7 +33,7 @@ int strFits(char *buff, int buffsize, char *str){
     // covers both cases since -(-1) cancels out with -1
     int rem_len = buffsize-lastDel-1;
 
-    return len < rem_len;
+    return len <= rem_len;
 }
 
 // Inserts string to buffer
@@ -59,6 +60,35 @@ char *buffGetFirst(char *buff, int buffsize){
 
         res = realloc(res, ++len);
         res[i] = buff[i];
+        buff[i] = 0;
+    }
+
+    return res;
+}
+
+// Remove last string from buffer and return it
+char *buffGetLast(char *buff, int buffsize){
+    int prev_del = -1; // Previous from last delimiter
+    int last_del = getLastDel(buff, buffsize);
+
+    for(int i = last_del-1; i >= 0; i--){
+        if(buff[i] == '\n'){
+            prev_del = i;
+            break;
+        }
+    }
+
+    char *res = malloc(1);
+    int len = 0;
+    
+    for(int i = prev_del+1; i < last_del+1; i++){
+        if(buff[i] == '\n'){
+            buff[i] = 0;
+            break;
+        }
+
+        res = realloc(res, ++len);
+        res[len-1] = buff[i];
         buff[i] = 0;
     }
 
