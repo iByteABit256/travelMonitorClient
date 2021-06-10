@@ -391,12 +391,20 @@ int main(int argc, char *argv[]){
                     msgNum[i]++;
 
                 }else{
-                    
                     pfds[i].fd = -2; //Ignore events on next call
                     num_open_fds--;
                 }
             }
         }
+    }
+
+    for(int i = 0; i < numMonitors; i++){
+        for(int j = 0; j < mon_argc[i]; j++){
+            if(j != 0 && j != 1 && j != 3 && j != 5 && j != 7 && j != 9){
+                free(mon_argv[i][j]);
+            }
+        }
+        free(mon_argv[i]);
     }
 
     char *inbuf = malloc(MAX_LINE*sizeof(char));
@@ -407,6 +415,8 @@ int main(int argc, char *argv[]){
     int totalRequested = 0;
     int accepted = 0;
     int rejected = 0;
+
+    printf("TRAVEL MONITOR\n-----------------\n");
 
     while(1){
         // Read input

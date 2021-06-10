@@ -306,6 +306,8 @@ int main(int argc, char *argv[]){
                     strcat(temp, "/");
                     strcat(temp, direntp->d_name);
                     ListInsertLast(filepaths, temp);
+
+                    //free(l->value);
                 }
             }
             closedir(subdir);
@@ -354,6 +356,7 @@ int main(int argc, char *argv[]){
         if(strFits(cyclicBuff, cyclicBufferSize, filepath)){
             //printf("adding %s to buff\n", filepath);
             buffInsert(cyclicBuff, cyclicBufferSize, filepath);
+            free(filepath);
             ListDeleteLast(filepaths);
         }
     }
@@ -373,6 +376,8 @@ int main(int argc, char *argv[]){
         perror("mutex destroy");
         exit(1);
     }
+
+    free(cyclicBuff);
 
     //printf("Threads joined and mutex detroyed\n");
 
@@ -477,8 +482,6 @@ int main(int argc, char *argv[]){
 
     freeMemory(db->countries, db->viruses, db->persons);
     free(db);
-
-    free(buff);
 
     exit(0);
 }
