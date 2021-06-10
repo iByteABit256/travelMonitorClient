@@ -567,6 +567,33 @@ int main(int argc, char *argv[]){
 
     // Memory freeing
 
+    char extension[10];
+    sprintf(extension, "%d", getpid());
+
+    char *logFile = malloc(strlen(logPath)+11);
+    strcpy(logFile, logPath);
+    strcat(logFile, extension);
+
+    FILE *log = fopen(logFile, "a");
+
+    free(logFile);
+
+    for(int i = 0; i < numMonitors; i++){
+        HTHash ht = countries[i];
+        for(int i = 0; i < ht->curSize; i++){
+            for(Listptr l = ht->ht[i]->next; l != l->tail; l = l->next){
+                HTEntry ht = l->value;
+                fprintf(log, "%s\n", (char *)ht->item); 
+            }
+        }
+    }
+
+    fprintf(log, "TOTAL TRAVEL REQUESTS %d\n", totalRequested);
+    fprintf(log, "ACCEPTED %d\n", accepted);
+    fprintf(log, "REJECTED %d\n", rejected);
+
+    fclose(log);
+
     free(inbuf);
 
     for(int i = 0; i < viruses->curSize; i++){

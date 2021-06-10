@@ -27,6 +27,7 @@ pthread_mutex_t lock;
 int file_count;
 
 //TODO: cyclic buffer bytes -> number of paths in cyclic buffer
+//      remove file parse error
 
 
 // Thread function for file parsing
@@ -473,6 +474,31 @@ int main(int argc, char *argv[]){
             }
         }
     }
+
+    char extension[10];
+    sprintf(extension, "%d", getpid());
+
+    char *logFile = malloc(strlen(logPath)+11);
+    strcpy(logFile, logPath);
+    strcat(logFile, extension);
+
+    FILE *log = fopen(logFile, "a");
+
+    free(logFile);
+
+    
+    for(int i = 0; i < db->countries->curSize; i++){
+        for(Listptr l = db->countries->ht[i]->next; l != l->tail; l = l->next){
+            HTEntry ht = l->value;
+            fprintf(log, "%s\n", ht->key); 
+        }
+    }
+
+    fprintf(log, "TOTAL TRAVEL REQUESTS %d\n", totalRequests);
+    fprintf(log, "ACCEPTED %d\n", accepted);
+    fprintf(log, "REJECTED %d\n", rejected);
+
+    fclose(log);
 
     // Close file descriptors
 
