@@ -26,6 +26,8 @@
 pthread_mutex_t lock;
 int file_count;
 
+//TODO: cyclic buffer bytes -> number of paths in cyclic buffer
+
 
 // Thread function for file parsing
 void *parserThreadFunc(void *vargp){
@@ -33,11 +35,11 @@ void *parserThreadFunc(void *vargp){
 
     while(1){
 
-        printf("About to enter CS\n");
+        //printf("About to enter CS\n");
 
         pthread_mutex_lock(&lock);
 
-        printf("file count is %d\n", file_count);
+        //printf("file count is %d\n", file_count);
 
         if(file_count <= 0){
             pthread_mutex_unlock(&lock);
@@ -50,20 +52,20 @@ void *parserThreadFunc(void *vargp){
         }
 
         char *filepath = buffGetLast(db->cyclicBuff, db->cyclicBufferSize);
-        printf("parsing %s\n", filepath);
+        //printf("parsing %s\n", filepath);
         parseInputFile(filepath, db->sizeOfBloom, db->persons, db->countries, db->viruses);
-        printf("parsed %s\n", filepath);
+        //printf("parsed %s\n", filepath);
 
         free(filepath);
 
         file_count--;
 
-        printf("About to exit CS\n");
+        //printf("About to exit CS\n");
 
         pthread_mutex_unlock(&lock);
     }
 
-    printf("Thread done\n");
+    //printf("Thread done\n");
 
     return db;
 }
@@ -237,14 +239,14 @@ int main(int argc, char *argv[]){
 
     countryPaths = parseParameters(argc, argv, &port, &numThreads, &socketBufferSize, &cyclicBufferSize, &sizeOfBloom);
 
-    printf("PID: %d\n\
+    /*printf("PID: %d\n\
             port: %d\n\
             numThreads: %d\n\
             sizeofbloom: %d\n\
             socketBufferSize: %d\n\
             cyclicBufferSize: %d\n\
             filepaths: %p\n", getpid(), port, numThreads, sizeOfBloom, socketBufferSize, cyclicBufferSize, countryPaths);
-
+    */
 
     int sockfd, new_socket;
     struct sockaddr_in addr;
@@ -283,30 +285,6 @@ int main(int argc, char *argv[]){
         perror("accept");
         exit(EXIT_FAILURE);
     }
-
-    char buff[socketBufferSize];
-    memset(buff, 0, socketBufferSize);
-    strcpy(buff, "Hello!\n");
-
-    send(new_socket, buff, socketBufferSize, 0);
-
-    printf("Child - Wrote %s\n", buff);
-
-    strcpy(buff, "Done!\n");
-    send(new_socket, buff, socketBufferSize, 0);
-
-    printf("Child - Wrote %s\n", buff);
-
-    memset(buff, 0, socketBufferSize);
-
-    int bytes_read = 0;
-    do{
-        bytes_read = recv(new_socket, buff, socketBufferSize, 0);
-    }while(bytes_read <= 0 || strcmp(buff, "bye!\n"));
-
-    printf("Child - Read %s and exiting\n", buff);
-
-    close(new_socket);
 
     DIR *subdir;
     struct dirent *direntp;
@@ -360,7 +338,7 @@ int main(int argc, char *argv[]){
 
     pthread_t tid[numThreads];
 
-    printf("Mutex initialized\n");
+    //printf("Mutex initialized\n");
 
     for(int i = 0; i < numThreads; i++){
         if(pthread_create(&tid[i], NULL, parserThreadFunc, db) != 0){
@@ -369,18 +347,18 @@ int main(int argc, char *argv[]){
         }
     }
 
-    printf("Threads created\n");
+    //printf("Threads created\n");
 
     while(ListSize(filepaths) > 0){
         char *filepath = ListGetLast(filepaths)->value;
         if(strFits(cyclicBuff, cyclicBufferSize, filepath)){
-            printf("adding %s to buff\n", filepath);
+            //printf("adding %s to buff\n", filepath);
             buffInsert(cyclicBuff, cyclicBufferSize, filepath);
             ListDeleteLast(filepaths);
         }
     }
 
-    printf("All files added\n");
+    //printf("All files added\n");
 
     ListDestroy(filepaths);
 
@@ -396,121 +374,111 @@ int main(int argc, char *argv[]){
         exit(1);
     }
 
-    printf("Threads joined and mutex detroyed\n");
+    //printf("Threads joined and mutex detroyed\n");
 
-    popStatusByAge(HTGetItem(db->viruses, "COVID-19"), NULL, NULL, db->countries, NULL);
+    //popStatusByAge(HTGetItem(db->viruses, "COVID-19"), NULL, NULL, db->countries, NULL);
 
-    // // Send bloomfilters to parent
-    //     // -First message is virus name
-    //     // -Following messages are bloomfilter parts
+    // Send bloomfilters to parent
+        // -First message is virus name
+        // -Following messages are bloomfilter parts
 
-    // int count = 1;
-    // for(int i = 0; i < viruses->curSize; i++){
-	// 	for(Listptr l = viruses->ht[i]->next; l != l->tail; l = l->next){
-    //         HTEntry ht = l->value;
-    //         Virus v = ht->item;
+    int count = 1;
+    for(int i = 0; i < db->viruses->curSize; i++){
+		for(Listptr l = db->viruses->ht[i]->next; l != l->tail; l = l->next){
+            HTEntry ht = l->value;
+            Virus v = ht->item;
 
-	// 		char *buff = malloc(sizeof(char)*socketBufferSize);
-    //         memset(buff, 0, sizeof(char)*socketBufferSize);
-    //         strcpy(buff, v->name);
+			char *buff = malloc(sizeof(char)*socketBufferSize);
+            memset(buff, 0, sizeof(char)*socketBufferSize);
+            strcpy(buff, v->name);
 
-    //         write(fd2, buff, socketBufferSize);
-    //         for(int i = 0; i <= sizeOfBloom/socketBufferSize; i++){
-    //             if(i == sizeOfBloom/socketBufferSize){
-    //                 // Remaining part of bloomfilter
+            write(new_socket, buff, socketBufferSize);
+            for(int i = 0; i <= sizeOfBloom/socketBufferSize; i++){
+                if(i == sizeOfBloom/socketBufferSize){
+                    // Remaining part of bloomfilter
 
-    //                 memcpy(buff, v->vaccinated_bloom->bloom+i*socketBufferSize, sizeOfBloom%socketBufferSize);
-    //             }else{
-    //                 memcpy(buff, v->vaccinated_bloom->bloom+i*socketBufferSize, socketBufferSize);
-    //             }
-    //             write(fd2, buff, socketBufferSize);
-    //         }
-    //         free(buff);
-    //         count++;
-	// 	}
-	// }
+                    memcpy(buff, v->vaccinated_bloom->bloom+i*socketBufferSize, sizeOfBloom%socketBufferSize);
+                }else{
+                    memcpy(buff, v->vaccinated_bloom->bloom+i*socketBufferSize, socketBufferSize);
+                }
+                write(new_socket, buff, socketBufferSize);
+            }
+            free(buff);
+            count++;
+		}
+	}
 
-    // if(close(fd2)){
-    //     perror("close error\n");
-    //     exit(1);
-    // }
+    char buff[socketBufferSize];
+    memset(buff, 0, socketBufferSize);
+    strcpy(buff, "done");
 
-    // fd = open(pipename, O_RDONLY);
+    send(new_socket, buff, socketBufferSize, 0);
 
-    // int totalRequests = 0;
-    // int accepted = 0;
-    // int rejected = 0;
+    int totalRequests = 0;
+    int accepted = 0;
+    int rejected = 0;
 
-    // while(1){
-    //     char buff[socketBufferSize];
-    //     int bytes_read = read(fd, buff, socketBufferSize);
+    while(1){
+        char buff[socketBufferSize];
+        int bytes_read = read(new_socket, buff, socketBufferSize);
 
-    //     if(bytes_read > 0){
+        if(bytes_read > 0){
 
-    //         if(!strcmp(buff, "travelRequest")){
-    //             totalRequests++;
+            if(!strcmp(buff, "travelRequest")){
+                totalRequests++;
 
-    //             bytes_read = read(fd, buff, socketBufferSize);
+                bytes_read = read(new_socket, buff, socketBufferSize);
 
-    //             char *id = malloc(strlen(buff)+1);
-    //             strcpy(id, buff);
+                char *id = malloc(strlen(buff)+1);
+                strcpy(id, buff);
 
-    //             bytes_read = read(fd, buff, socketBufferSize);
+                bytes_read = read(new_socket, buff, socketBufferSize);
 
-    //             char *virName = malloc(strlen(buff)+1);
-    //             strcpy(virName, buff);
+                char *virName = malloc(strlen(buff)+1);
+                strcpy(virName, buff);
 
-    //             Virus v = HTGetItem(viruses, virName);
+                Virus v = HTGetItem(db->viruses, virName);
 
-    //             VaccRecord rec = skipGet(v->vaccinated_persons, id);
+                VaccRecord rec = skipGet(v->vaccinated_persons, id);
 
-    //             if(rec){
-    //                 accepted++;
-    //                 close(fd);
-    //                 fd2 = open(pipename2, O_WRONLY);
-    //                 strcpy(buff, "YES");
-    //                 write(fd2, buff, socketBufferSize);
-    //                 strcpy(buff, "");
-    //                 sprintf(buff, "%d", rec->date->day);
-    //                 write(fd2, buff, socketBufferSize);
-    //                 strcpy(buff, "");
-    //                 sprintf(buff, "%d", rec->date->month);
-    //                 write(fd2, buff, socketBufferSize);
-    //                 strcpy(buff, "");
-    //                 sprintf(buff, "%d", rec->date->year);
-    //                 write(fd2, buff, socketBufferSize);
-    //                 close(fd2);
-    //                 fd = open(pipename, O_RDONLY);
-    //             }else{
-    //                 rejected++;
-    //                 close(fd);
-    //                 fd2 = open(pipename2, O_WRONLY);
-    //                 strcpy(buff, "NO");
-    //                 write(fd2, buff, socketBufferSize);
-    //                 close(fd2);
-    //                 fd = open(pipename, O_RDONLY);
-    //             }
+                if(rec){
+                    accepted++;
+                    strcpy(buff, "YES");
+                    write(new_socket, buff, socketBufferSize);
+                    strcpy(buff, "");
+                    sprintf(buff, "%d", rec->date->day);
+                    write(new_socket, buff, socketBufferSize);
+                    strcpy(buff, "");
+                    sprintf(buff, "%d", rec->date->month);
+                    write(new_socket, buff, socketBufferSize);
+                    strcpy(buff, "");
+                    sprintf(buff, "%d", rec->date->year);
+                    write(new_socket, buff, socketBufferSize);
+                }else{
+                    rejected++;
+                    strcpy(buff, "NO");
+                    write(new_socket, buff, socketBufferSize);
+                }
 
-    //             free(id);
-    //             free(virName);
-    //         }
-    //         if(!strcmp(buff, "exit")){
-    //             break;
-    //         }
-    //     }
-    // }
+                free(id);
+                free(virName);
+            }
+            if(!strcmp(buff, "exit")){
+                break;
+            }
+        }
+    }
 
-    // // Close file descriptors
+    // Close file descriptors
 
-    // close(fd);
-    // close(fd2);
+    close(new_socket);
 
-    // // Memory freeing
+    // Memory freeing
 
-    // freeMemory(countries, viruses, persons);
+    freeMemory(db->countries, db->viruses, db->persons);
+    free(db);
 
-    // free(buff);
-    // free(pfds);
+    free(buff);
 
     exit(0);
 }

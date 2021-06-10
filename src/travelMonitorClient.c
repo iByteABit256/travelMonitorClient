@@ -310,9 +310,19 @@ int main(int argc, char *argv[]){
         pfds[i].events = POLLIN;
     }
 
+    HTHash viruses = HTCreate();
+
+    int msgNum[numMonitors];
+    char *curVirus[numMonitors];
+    BloomFilter tempBloom[numMonitors];
+
+    for(int i = 0; i < numMonitors; i++){
+        msgNum[i] = 0;
+        tempBloom[i] = bloomInitialize(sizeOfBloom);
+    }
+
     while(num_open_fds > 0){
         int ready = poll(pfds, nfds, -1);
-        //printf("ready = %d\n", ready);
 
         if(ready == -1){
             perror("poll error\n");
@@ -329,34 +339,249 @@ int main(int argc, char *argv[]){
 
                     if(bytes_read == -1){
                         perror("Error in read");
-                        //continue;
                         exit(1);
                     }else if(bytes_read == 0){
                         printf("continuing...\n");
                         continue;
                     }
 
-                    printf("Parent - Read %s from fd %d\n", buff, pfds[i].fd);
-
-                    if(!strcmp(buff, "Done!\n")){
-                        strcpy(buff, "bye!\n");
-                        printf("Parent - Writing %s to fd %d\n", buff, pfds[i].fd);
-                        send(pfds[i].fd, buff, socketBufferSize, 0);
+                    if(!strcmp(buff, "done")){
 
                         pfds[i].fd = -2; //Ignore events on next call
                         num_open_fds--; 
                     }
 
+                    // First message is virus name
+                    if(msgNum[i] == 0){
+
+                        char *virName = malloc((strlen(buff)+1)*sizeof(char));
+                        strcpy(virName, buff);
+
+                        curVirus[i] = malloc(strlen(virName)+1);
+                        strcpy(curVirus[i], virName);
+
+                        if(!HTExists(viruses, virName)){
+                            Virus vir = newVirus(virName, sizeOfBloom, 9, 0.5);
+                            HTInsert(viruses, vir->name, vir);
+                        }
+
+                        free(virName);
+                    
+                    }else if(msgNum[i]-1 < sizeOfBloom/socketBufferSize){   
+                        // Bloomfilter parts copied to temporary bloomfilter
+
+                        memcpy(tempBloom[i]->bloom+(msgNum[i]-1)*socketBufferSize, buff, socketBufferSize);
+                    }else{
+                        // Temporary bloomfilter acts as a mask on the actual bloomfilter
+
+                        Virus vir = HTGetItem(viruses, curVirus[i]);
+                        BloomFilter bF = vir->vaccinated_bloom;
+                        bloomOR(bF, tempBloom[i]);
+
+                        msgNum[i] = 0;
+                        free(curVirus[i]);
+                        curVirus[i] = NULL;
+                        bloomDestroy(tempBloom[i]);
+                        free(tempBloom[i]);
+                        tempBloom[i] = bloomInitialize(sizeOfBloom);
+
+                        continue;
+                    }
+
+                    msgNum[i]++;
+
                 }else{
-                    // if(close(pfds[i].fd)){
-                    //     perror("close error\n");
-                    //     exit(1);
-                    // }
+                    
                     pfds[i].fd = -2; //Ignore events on next call
                     num_open_fds--;
                 }
             }
         }
+    }
+
+    char *inbuf = malloc(MAX_LINE*sizeof(char));
+    memset(inbuf, 0, MAX_LINE);
+
+    // Input loop
+
+    int totalRequested = 0;
+    int accepted = 0;
+    int rejected = 0;
+
+    while(1){
+        // Read input
+        if(fgets(inbuf, MAX_LINE, stdin) != NULL){
+
+            char *token = strtok(inbuf, " \n"); 
+
+            if(token == NULL){
+                fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                continue;
+            }
+
+            if(!strcmp(token, "/travelRequest")){
+                totalRequested++;
+
+                char *id;
+                char *date_str;
+                Date date;
+                char *countryFrom;
+                char *countryTo;
+                char *virName;
+
+                id = strtok(NULL, " \n");
+
+                if(id == NULL){
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    continue;
+                }
+
+                date_str = strtok(NULL, " \n");
+
+                if(date_str == NULL){
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    continue;
+                }        
+
+                countryFrom = strtok(NULL, " \n");
+
+                if(countryFrom == NULL){
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    continue;
+                }
+
+                countryTo = strtok(NULL, " \n");
+
+                if(countryTo == NULL){
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    continue;
+                }
+
+                virName = strtok(NULL, " \n");
+
+                if(virName == NULL){
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    continue;
+                }
+
+                date = malloc(sizeof(struct datestr));
+
+                char *datetok1 = strtok(date_str, "-\n");
+                char *datetok2 = strtok(NULL, "-\n");
+                char *datetok3 = strtok(NULL, "-\n");
+
+                // check if date is valid
+                if(datetok1 != NULL && datetok2 != NULL && datetok3 != NULL){
+                    date->day = atoi(datetok1); 
+                    date->month = atoi(datetok2); 
+                    date->year = atoi(datetok3);
+                }else{
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    free(date);
+                    continue;
+                }
+
+                Virus v = HTGetItem(viruses, virName);
+                if(v == NULL){
+                    printf("ERROR: NO DATA ABOUT GIVEN VIRUS\n\n");
+                    free(date);
+                    continue;
+                }
+
+                if(bloomExists(v->vaccinated_bloom, id)){
+                    int mon = getMonitorNum(numMonitors, countries, countryFrom);
+
+                    char buff[socketBufferSize];
+                    memset(buff, 0, socketBufferSize);
+                    strcpy(buff, "travelRequest");
+
+                    write(sockfd[mon], buff, socketBufferSize);
+
+                    strcpy(buff, id);
+
+                    write(sockfd[mon], buff, socketBufferSize);
+
+                    strcpy(buff, virName);
+
+                    write(sockfd[mon], buff, socketBufferSize);
+
+                    read(sockfd[mon], buff, socketBufferSize);
+
+                    if(!strcmp(buff, "YES")){
+                        Date vacc_date = malloc(sizeof(struct datestr));
+                        read(sockfd[mon], buff, socketBufferSize);
+                        vacc_date->day = atoi(buff);
+                        read(sockfd[mon], buff, socketBufferSize);
+                        vacc_date->month = atoi(buff);
+                        read(sockfd[mon], buff, socketBufferSize);
+                        vacc_date->year = atoi(buff);
+
+                        if(getDiffDate(date, vacc_date)/30 >= 6){
+                            printf("REQUEST REJECTED – YOU WILL NEED ANOTHER VACCINATION BEFORE TRAVEL DATE\n\n");
+                            rejected++;
+                        }else{
+                            printf("REQUEST ACCEPTED – HAPPY TRAVELS\n\n");
+                            accepted++;
+                        }
+
+                        free(vacc_date);
+
+                    }else if(!strcmp(buff, "NO")){
+                        printf("REQUEST REJECTED – YOU ARE NOT VACCINATED\n\n");
+                        rejected++;
+                    }
+
+                }else{
+                    printf("REQUEST REJECTED – YOU ARE NOT VACCINATED\n\n");
+                    rejected++;
+                }
+                free(date);
+            }
+
+            if(!strcmp(token, "/exit")){
+                for(int i = 0; i < numMonitors; i++){
+                    write(sockfd[i], "exit", 5);
+                }
+
+                break;
+            }
+        }
+    }
+
+    // Close file descriptors
+
+    // for(int i = 0 ; i < numMonitors; i++){
+    //     close(fd_arr[i][0]);
+    //     close(fd_arr[i][1]);
+    // }
+
+    // Memory freeing
+
+    free(inbuf);
+
+    for(int i = 0; i < viruses->curSize; i++){
+		for(Listptr l = viruses->ht[i]->next; l != l->tail; l = l->next){
+            HTEntry ht = l->value;
+            Virus v = ht->item;
+            destroyVirus(v);
+            free(v);
+        }
+    }
+
+    HTDestroy(viruses);
+    free(pfds);
+    
+    for(int i = 0; i < numMonitors; i++){
+        HTHash ht = countries[i];
+        for(int i = 0; i < ht->curSize; i++){
+            for(Listptr l = ht->ht[i]->next; l != l->tail; l = l->next){
+                HTEntry ht = l->value;
+                free(ht->item);   
+            }
+        }
+        HTDestroy(ht);
+        bloomDestroy(tempBloom[i]);
+        free(tempBloom[i]);
     }
 
     return 0;
