@@ -4,6 +4,15 @@
 #include "../lib/date/date.h"
 
 
+// Request
+struct requeststr{
+    Date date;
+    char *countryName;
+    int accepted;
+};
+
+typedef struct requeststr *Request;
+
 // Database
 struct databasestr{
     HTHash viruses;

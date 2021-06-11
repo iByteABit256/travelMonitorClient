@@ -1,4 +1,3 @@
-#include <linux/limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -423,6 +422,8 @@ int main(int argc, char *argv[]){
 
     send(new_socket, buff, socketBufferSize, 0);
 
+    HTHash requests = HTCreate();
+
     int totalRequests = 0;
     int accepted = 0;
     int rejected = 0;
@@ -446,11 +447,41 @@ int main(int argc, char *argv[]){
                 char *virName = malloc(strlen(buff)+1);
                 strcpy(virName, buff);
 
+                bytes_read = read(new_socket, buff, socketBufferSize);
+
+                char *countryTo = malloc(strlen(buff)+1);
+                strcpy(countryTo, buff);
+
+                bytes_read = read(new_socket, buff, socketBufferSize);
+                int day = atoi(buff);
+
+                bytes_read = read(new_socket, buff, socketBufferSize);
+                int month = atoi(buff);
+
+                bytes_read = read(new_socket, buff, socketBufferSize);
+                int year = atoi(buff);
+
+                Date req_date = malloc(sizeof(struct datestr));
+                req_date->day = day;
+                req_date->month = month;
+                req_date->year = year;
+
                 Virus v = HTGetItem(db->viruses, virName);
+
+                Listptr requestlist = HTGetItem(requests, v->name);
+                if(requestlist == NULL){
+                    requestlist = ListCreate();
+                    HTInsert(requests, v->name, requestlist);
+                }
 
                 VaccRecord rec = skipGet(v->vaccinated_persons, id);
 
+                Request req = malloc(sizeof(struct requeststr));
+                req->date = req_date;
+                req->countryName = countryTo;
+
                 if(rec){
+                    req->accepted = 1;
                     accepted++;
                     strcpy(buff, "YES");
                     write(new_socket, buff, socketBufferSize);
@@ -464,13 +495,94 @@ int main(int argc, char *argv[]){
                     sprintf(buff, "%d", rec->date->year);
                     write(new_socket, buff, socketBufferSize);
                 }else{
+                    req->accepted = 0;
                     rejected++;
                     strcpy(buff, "NO");
                     write(new_socket, buff, socketBufferSize);
                 }
 
+                ListInsertLast(requestlist, req);
+
                 free(id);
                 free(virName);
+            }
+
+            if(!strcmp(buff, "travelStats")){
+                read(new_socket, buff, socketBufferSize);
+
+                char *virName = malloc(strlen(buff)+1);
+                strcpy(virName, buff);
+
+                Date date1, date2;
+                int day, month, year;
+
+                read(new_socket, buff, socketBufferSize);
+                day = atoi(buff);
+
+                read(new_socket, buff, socketBufferSize);
+                month = atoi(buff);
+
+                read(new_socket, buff, socketBufferSize);
+                year = atoi(buff);
+
+                date1 = malloc(sizeof(struct datestr));
+                date1->day = day;
+                date1->month = month;
+                date1->year = year;
+
+                read(new_socket, buff, socketBufferSize);
+                day = atoi(buff);
+
+                read(new_socket, buff, socketBufferSize);
+                month = atoi(buff);
+
+                read(new_socket, buff, socketBufferSize);
+                year = atoi(buff);
+
+                date2 = malloc(sizeof(struct datestr));
+                date2->day = day;
+                date2->month = month;
+                date2->year = year;
+
+                read(new_socket, buff, socketBufferSize);
+                char *country = malloc(strlen(buff)+1);
+                strcpy(country, buff);
+
+                int countryGiven = strcmp(country, "NO COUNTRY");
+
+                int totalRequests = 0;
+                int accepted = 0;
+                int rejected = 0;
+
+                Listptr requestlist = HTGetItem(requests, virName);
+                if(requestlist != NULL){
+                    for(Listptr l = requestlist->head->next; l != l->tail; l = l->next){
+                        Request r = l->value;
+
+                        if(countryGiven && strcmp(country, r->countryName)){
+                            continue;
+                        }
+
+                        if(compareDates(r->date, date1) >= 0 && compareDates(date2, r->date) >= 0){
+                            totalRequests++;
+                            r->accepted? accepted++ : rejected++;
+                        }
+                    }
+                }
+
+                sprintf(buff, "%d", totalRequests);
+                write(new_socket, buff, socketBufferSize);
+
+                sprintf(buff, "%d", accepted);
+                write(new_socket, buff, socketBufferSize);
+
+                sprintf(buff, "%d", rejected);
+                write(new_socket, buff, socketBufferSize);
+
+                free(virName);
+                free(date1);
+                free(date2);
+                free(country);
             }
 
             if(!strcmp(buff, "searchVaccinationStatus")){
@@ -574,6 +686,25 @@ int main(int argc, char *argv[]){
     close(new_socket);
 
     // Memory freeing
+
+    for(int i = 0; i < requests->curSize; i++){
+        for(Listptr l = requests->ht[i]->next; l != l->tail; l = l->next){
+            HTEntry ht = l->value;
+            
+            Listptr reqs = ht->item;
+            for(reqs = reqs->head->next; reqs != reqs->tail; reqs = reqs->next){
+                Request r = reqs->value;
+
+                free(r->countryName);
+                free(r->date);
+                free(r);
+            }
+
+            ListDestroy(reqs);
+        }
+    }
+
+    HTDestroy(requests);
 
     freeMemory(db->countries, db->viruses, db->persons);
     free(db);

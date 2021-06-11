@@ -85,5 +85,4 @@ clean:
 	-rm -f $(OBJ)
 	-rm -f $(TARGET2)
 	-rm -f $(OBJ2)
-	-rm ./tmp/*
 	-rm ./logs/*

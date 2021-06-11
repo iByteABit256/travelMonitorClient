@@ -1,5 +1,3 @@
-#include <bits/types/siginfo_t.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -503,16 +501,26 @@ int main(int argc, char *argv[]){
 
                     char buff[socketBufferSize];
                     memset(buff, 0, socketBufferSize);
-                    strcpy(buff, "travelRequest");
 
+                    strcpy(buff, "travelRequest");
                     write(sockfd[mon], buff, socketBufferSize);
 
                     strcpy(buff, id);
-
                     write(sockfd[mon], buff, socketBufferSize);
 
                     strcpy(buff, virName);
+                    write(sockfd[mon], buff, socketBufferSize);
 
+                    strcpy(buff, countryTo);
+                    write(sockfd[mon], buff, socketBufferSize);
+
+                    sprintf(buff, "%d", date->day);
+                    write(sockfd[mon], buff, socketBufferSize);
+
+                    sprintf(buff, "%d", date->month);
+                    write(sockfd[mon], buff, socketBufferSize);
+
+                    sprintf(buff, "%d", date->year);
                     write(sockfd[mon], buff, socketBufferSize);
 
                     read(sockfd[mon], buff, socketBufferSize);
@@ -587,6 +595,124 @@ int main(int argc, char *argv[]){
                         continue;
                     }
                 }
+            }
+
+            if(!strcmp(token, "/travelStats")){
+                char *virName;
+                char *date1_str;
+                char *date2_str;
+                char *country;
+                Date date1, date2;
+
+                virName = strtok(NULL, " \n");
+
+                if(virName == NULL){
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    continue;
+                }
+
+                date1_str = strtok(NULL, " \n");
+
+                if(date1_str == NULL){
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    continue;
+                }
+
+                date2_str = strtok(NULL, " \n");
+
+                if(date1_str == NULL){
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    continue;
+                }
+
+                country = strtok(NULL, " \n");
+
+                date1 = malloc(sizeof(struct datestr));
+
+                char *datetok1 = strtok(date1_str, "-\n");
+                char *datetok2 = strtok(NULL, "-\n");
+                char *datetok3 = strtok(NULL, "-\n");
+
+                // check if date is valid
+                if(datetok1 != NULL && datetok2 != NULL && datetok3 != NULL){
+                    date1->day = atoi(datetok1); 
+                    date1->month = atoi(datetok2); 
+                    date1->year = atoi(datetok3);
+                }else{
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    free(date1);
+                    continue;
+                }
+
+                date2 = malloc(sizeof(struct datestr));
+
+                datetok1 = strtok(date2_str, "-\n");
+                datetok2 = strtok(NULL, "-\n");
+                datetok3 = strtok(NULL, "-\n");
+
+                // check if date is valid
+                if(datetok1 != NULL && datetok2 != NULL && datetok3 != NULL){
+                    date2->day = atoi(datetok1); 
+                    date2->month = atoi(datetok2); 
+                    date2->year = atoi(datetok3);
+                }else{
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    free(date2);
+                    continue;
+                }
+
+                int totalRequested = 0;
+                int accepted = 0;
+                int rejected = 0;
+
+                char buff[socketBufferSize];
+                memset(buff, 0, socketBufferSize);
+
+                for(int i = 0; i < numMonitors; i++){
+                    strcpy(buff, "travelStats");
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    strcpy(buff, virName);
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    sprintf(buff, "%d", date1->day);
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    sprintf(buff, "%d", date1->month);
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    sprintf(buff, "%d", date1->year);
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    sprintf(buff, "%d", date2->day);
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    sprintf(buff, "%d", date2->month);
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    sprintf(buff, "%d", date2->year);
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    if(country == NULL){
+                        strcpy(buff, "NO COUNTRY");
+                    }else{
+                        strcpy(buff, country);
+                    }
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    read(sockfd[i], buff, socketBufferSize);
+                    totalRequested += atoi(buff);
+
+                    read(sockfd[i], buff, socketBufferSize);
+                    accepted += atoi(buff);
+
+                    read(sockfd[i], buff, socketBufferSize);
+                    rejected += atoi(buff);
+                }
+
+                printf("TOTAL REQUESTS: %d\nACCEPTED: %d\nREJECTED: %d\n\n", totalRequested, accepted, rejected);
+                free(date1);
+                free(date2);
             }
 
             if(!strcmp(token, "/exit")){

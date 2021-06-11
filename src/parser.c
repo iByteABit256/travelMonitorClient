@@ -55,7 +55,6 @@ void parseInputFile(char *filePath, int bloomSize, HTHash citizenRecords, HTHash
 
     FILE *inputFile = fopen(filePath, "r");
     if(inputFile == NULL){
-        fprintf(stderr, "ERROR: Could not open %s\n", filePath);
         return;
     }
 
