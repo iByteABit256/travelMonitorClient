@@ -10,8 +10,5 @@ int strFits(char *buff, int buffsize, char *str);
 // Inserts string to buffer
 void buffInsert(char *buff, int buffsize, char *str);
 
-// Remove first string from buffer and return it
-char *buffGetFirst(char *buff, int buffsize);
-
 // Remove last string from buffer and return it
 char *buffGetLast(char *buff, int buffsize);

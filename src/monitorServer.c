@@ -20,14 +20,12 @@
 #include "../lib/buffer/buffer.h"
 
 #define INITIAL_BUFFSIZE 100
-#define MAX_CONNECTIONS 3
+#define MAX_CONNECTIONS 1
 #define MAX_FILEPATHSIZE 50
 
-pthread_mutex_t lock;
-int file_count;
 
-//TODO:
-//      remove file parse error
+pthread_mutex_t lock;
+int file_count; // Number of total file paths to be received from buffer
 
 // Thread function for file parsing
 void *parserThreadFunc(void *vargp){
@@ -35,11 +33,7 @@ void *parserThreadFunc(void *vargp){
 
     while(1){
 
-        //printf("About to enter CS\n");
-
         pthread_mutex_lock(&lock);
-
-        //printf("file count is %d\n", file_count);
 
         if(file_count <= 0){
             pthread_mutex_unlock(&lock);
@@ -52,20 +46,15 @@ void *parserThreadFunc(void *vargp){
         }
 
         char *filepath = buffGetLast(db->cyclicBuff, db->cyclicBufferSize);
-        //printf("parsing %s\n", filepath);
+
         parseInputFile(filepath, db->sizeOfBloom, db->persons, db->countries, db->viruses);
-        //printf("parsed %s\n", filepath);
 
         free(filepath);
 
         file_count--;
 
-        //printf("About to exit CS\n");
-
         pthread_mutex_unlock(&lock);
     }
-
-    //printf("Thread done\n");
 
     return db;
 }
@@ -242,28 +231,19 @@ int main(int argc, char *argv[]){
     // path number -> bytes
     cyclicBufferSize *= MAX_FILEPATHSIZE;
 
-    /*printf("PID: %d\n\
-            port: %d\n\
-            numThreads: %d\n\
-            sizeofbloom: %d\n\
-            socketBufferSize: %d\n\
-            cyclicBufferSize: %d\n\
-            filepaths: %p\n", getpid(), port, numThreads, sizeOfBloom, socketBufferSize, cyclicBufferSize, countryPaths);
-    */
-
     int sockfd, new_socket;
     struct sockaddr_in addr;
-    //int opt = 1;
     int addrlen = sizeof(addr);
     char buffer[socketBufferSize];
     memset(buffer, 0, socketBufferSize);
-    
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
-    {
+
+    // Socket creation    
+    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) == 0){
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
 
+    // Get local IP
     char hostname[HOST_NAME_MAX];
     gethostname(hostname, HOST_NAME_MAX);
 
@@ -273,7 +253,9 @@ int main(int argc, char *argv[]){
     addr.sin_family = AF_INET;
     addr.sin_port = htons(port);
     addr.sin_addr.s_addr = locIP->s_addr;
-       
+    
+    // Initialize and accept connection from new socket
+
     if(bind(sockfd, (struct sockaddr *)&addr, sizeof(addr)) < 0){
         perror("bind failed");
         exit(EXIT_FAILURE);
@@ -309,8 +291,6 @@ int main(int argc, char *argv[]){
                     strcat(temp, "/");
                     strcat(temp, direntp->d_name);
                     ListInsertLast(filepaths, temp);
-
-                    //free(l->value);
                 }
             }
             closedir(subdir);
@@ -334,7 +314,7 @@ int main(int argc, char *argv[]){
 
     file_count = ListSize(filepaths);
 
-    // Parse files
+    // Create threads and pass file paths to them to be parsed
 
     if(pthread_mutex_init(&lock, NULL) != 0){
         perror("mutex init");
@@ -343,8 +323,6 @@ int main(int argc, char *argv[]){
 
     pthread_t tid[numThreads];
 
-    //printf("Mutex initialized\n");
-
     for(int i = 0; i < numThreads; i++){
         if(pthread_create(&tid[i], NULL, parserThreadFunc, db) != 0){
             perror("pthread create");
@@ -352,19 +330,14 @@ int main(int argc, char *argv[]){
         }
     }
 
-    //printf("Threads created\n");
-
     while(ListSize(filepaths) > 0){
         char *filepath = ListGetLast(filepaths)->value;
         if(strFits(cyclicBuff, cyclicBufferSize, filepath)){
-            //printf("adding %s to buff\n", filepath);
             buffInsert(cyclicBuff, cyclicBufferSize, filepath);
             free(filepath);
             ListDeleteLast(filepaths);
         }
     }
-
-    //printf("All files added\n");
 
     ListDestroy(filepaths);
 
@@ -381,10 +354,6 @@ int main(int argc, char *argv[]){
     }
 
     free(cyclicBuff);
-
-    //printf("Threads joined and mutex detroyed\n");
-
-    //popStatusByAge(HTGetItem(db->viruses, "COVID-19"), NULL, NULL, db->countries, NULL);
 
     // Send bloomfilters to parent
         // -First message is virus name
@@ -586,9 +555,6 @@ int main(int argc, char *argv[]){
             }
 
             if(!strcmp(buff, "searchVaccinationStatus")){
-                // while(read(sockfd, buff, socketBufferSize) == 0){
-                //     continue;
-                // }
                 read(new_socket, buff, socketBufferSize);
 
                 char *citizenID = malloc(strlen(buff)+1);
@@ -616,7 +582,6 @@ int main(int argc, char *argv[]){
                 strcpy(buff, per->country->name);
                 strcat(buff, "\n");
                 write(new_socket, buff, socketBufferSize);
-                // strcpy(buff, "AGE ");
                 sprintf(buff, "AGE %d", per->age);
                 strcat(buff, "\n");
                 write(new_socket, buff, socketBufferSize);
@@ -632,7 +597,6 @@ int main(int argc, char *argv[]){
                             write(new_socket, buff, socketBufferSize);
                             strcpy(buff, "VACCINATED ON ");
                             write(new_socket, buff, socketBufferSize);
-                            //strcpy(buff, "");
                             sprintf(buff, "%02d-%02d-%04d", rec->date->day, rec->date->month, rec->date->year);
                             strcat(buff, "\n");
                             write(new_socket, buff, socketBufferSize);
@@ -655,6 +619,8 @@ int main(int argc, char *argv[]){
             }
         }
     }
+
+    // Create log file
 
     char extension[10];
     sprintf(extension, "%d", getpid());

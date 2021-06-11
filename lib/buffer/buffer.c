@@ -47,25 +47,6 @@ void buffInsert(char *buff, int buffsize, char *str){
     buff[lastDel+len] = '\n'; 
 }
 
-// Remove first string from buffer and return it
-char *buffGetFirst(char *buff, int buffsize){
-    char *res = malloc(1);
-    int len = 0;
-    
-    for(int i = 0; i < buffsize; i++){
-        if(buff[i] == '\n'){
-            buff[i] = 0;
-            break;
-        }
-
-        res = realloc(res, ++len);
-        res[i] = buff[i];
-        buff[i] = 0;
-    }
-
-    return res;
-}
-
 // Remove last string from buffer and return it
 char *buffGetLast(char *buff, int buffsize){
     int prev_del = -1; // Previous from last delimiter

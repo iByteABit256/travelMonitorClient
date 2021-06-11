@@ -103,12 +103,14 @@ void parseExecutableParameters(int argc, char *argv[], int *monitorNum, int *soc
     }
 }
 
+// Returns number of digits
 int getDigits(int num){
     int i = 0;
     while((num = num/10)) i++;
     return i+1;
 }
 
+// Returns monitor responsible for country
 int getMonitorNum(int numMonitors, HTHash *countries, char *country){
     for(int i = 0; i < numMonitors; i++){
         if(HTExists(countries[i], country)){
@@ -143,8 +145,6 @@ int main(int argc, char *argv[]){
         ports[i] = S_PORT+i;
     }
 
-    //pid_t pids[numMonitors];
-    
     char **mon_argv[numMonitors];
     int mon_argc[numMonitors];
 
@@ -203,7 +203,7 @@ int main(int argc, char *argv[]){
         countries[i] = HTCreate();
     }
 
-    // Pass subdirectories to children with round robin order
+    // Add subdirectories to argv in round-robin order
 
     int count = 0;
     for(Listptr l = subdirs->head->next; l != l->tail; l = l->next){
@@ -240,6 +240,8 @@ int main(int argc, char *argv[]){
         count++;
     }
 
+    // terminate argv's with NULL pointer
+
     for(int i = 0; i < numMonitors; i++){
         mon_argv[i] = realloc(mon_argv[i], ++mon_argc[i]*sizeof(char *));
         mon_argv[i][mon_argc[i]-1] = NULL;
@@ -264,20 +266,20 @@ int main(int argc, char *argv[]){
             // Forked process
             execv("./monitorServer", mon_argv[i]);
             exit(1);
-        }else{
-            //pids[i] = pid;
         }
     }
 
     int sockfd[numMonitors];
 	struct sockaddr_in addr[numMonitors];
 
+    // Get local IP
     char hostname[HOST_NAME_MAX];
     gethostname(hostname, HOST_NAME_MAX);
 
     struct hostent *ent = gethostbyname(hostname);
     struct in_addr *locIP = (struct in_addr *)ent->h_addr_list[0];
 
+    // Create sockets and connect
     for(int i = 0; i < numMonitors; i++){
 
     	if((sockfd[i] = socket(AF_INET, SOCK_STREAM, 0)) < 0){
@@ -319,6 +321,7 @@ int main(int argc, char *argv[]){
         tempBloom[i] = bloomInitialize(sizeOfBloom);
     }
 
+    // Poll monitors and receive bloomfilters
     while(num_open_fds > 0){
         int ready = poll(pfds, nfds, -1);
 
@@ -396,6 +399,7 @@ int main(int argc, char *argv[]){
         }
     }
 
+    // Free malloc'ed argv strings and argv's
     for(int i = 0; i < numMonitors; i++){
         for(int j = 0; j < mon_argc[i]; j++){
             if(j != 0 && j != 1 && j != 3 && j != 5 && j != 7 && j != 9){
@@ -574,16 +578,10 @@ int main(int argc, char *argv[]){
                     strcpy(buff, id);
                     write(sockfd[i], buff, socketBufferSize);
 
-                    // while(read(sockfd[i], buff, socketBufferSize) == 0){
-                    //     continue;
-                    // }
                     read(sockfd[i], buff, socketBufferSize);
 
                     if(!strcmp(buff, "found")){
                         while(1){
-                            // while(read(sockfd[i], buff, socketBufferSize) == 0){
-                            //     continue;
-                            // }
                             read(sockfd[i], buff, socketBufferSize);
                             if(!strcmp(buff, "done")){
                                 printf("\n");
@@ -729,7 +727,7 @@ int main(int argc, char *argv[]){
         }
     }
 
-    // Memory freeing
+    // Create log file
 
     char extension[10];
     sprintf(extension, "%d", getpid());
@@ -757,6 +755,8 @@ int main(int argc, char *argv[]){
     fprintf(log, "REJECTED %d\n", rejected);
 
     fclose(log);
+
+    // Memory freeing
 
     free(inbuf);
 
