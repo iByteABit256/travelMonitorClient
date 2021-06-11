@@ -22,11 +22,12 @@
 
 #define INITIAL_BUFFSIZE 100
 #define MAX_CONNECTIONS 3
+#define MAX_FILEPATHSIZE 50
 
 pthread_mutex_t lock;
 int file_count;
 
-//TODO: cyclic buffer bytes -> number of paths in cyclic buffer
+//TODO:
 //      remove file parse error
 
 
@@ -239,6 +240,9 @@ int main(int argc, char *argv[]){
     Listptr countryPaths = NULL;
 
     countryPaths = parseParameters(argc, argv, &port, &numThreads, &socketBufferSize, &cyclicBufferSize, &sizeOfBloom);
+
+    // path number -> bytes
+    cyclicBufferSize *= MAX_FILEPATHSIZE;
 
     /*printf("PID: %d\n\
             port: %d\n\

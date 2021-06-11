@@ -558,13 +558,6 @@ int main(int argc, char *argv[]){
         }
     }
 
-    // Close file descriptors
-
-    // for(int i = 0 ; i < numMonitors; i++){
-    //     close(fd_arr[i][0]);
-    //     close(fd_arr[i][1]);
-    // }
-
     // Memory freeing
 
     char extension[10];
