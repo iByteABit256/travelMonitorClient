@@ -121,7 +121,7 @@ Travel Stats
 
 The command is passed to every child (country string is "NO COUNTRY" if none was given)
 and the monitors each reply with their number of total, accepted and rejected requests.
-The parent then sums them up and returns them.
+The parent then sums them up and prints them.
 
 If a request was rejected by the parent because of the bloomfilter, the rejection
 is not counted.
@@ -133,7 +133,7 @@ Search Vaccination Status
 The parent sends the request to the monitors and they reply either with
 "not found" if they didn't find the requested information, or with "found"
 if they did, followed by the information and a message to indicate that
-the information has been all sent.
+the information has all been sent.
 
 For the monitor that found the information, the parent reads from the buffer
 and prints the contents to stdout until it reads "done".
