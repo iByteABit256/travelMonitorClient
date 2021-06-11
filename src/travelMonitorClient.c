@@ -548,9 +548,54 @@ int main(int argc, char *argv[]){
                 free(date);
             }
 
-            if(!strcmp(token, "/exit")){
+            if(!strcmp(token, "/searchVaccinationStatus")){
+                char *id = strtok(NULL, " \n");
+
+                if(id == NULL){
+                    fprintf(stderr, "ERROR: INCORRECT SYNTAX\n\n");
+                    continue;
+                }
+
                 for(int i = 0; i < numMonitors; i++){
-                    write(sockfd[i], "exit", 5);
+                    char buff[socketBufferSize];
+                    memset(buff, 0, socketBufferSize);
+                    strcpy(buff, "searchVaccinationStatus");
+
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    strcpy(buff, id);
+                    write(sockfd[i], buff, socketBufferSize);
+
+                    // while(read(sockfd[i], buff, socketBufferSize) == 0){
+                    //     continue;
+                    // }
+                    read(sockfd[i], buff, socketBufferSize);
+
+                    if(!strcmp(buff, "found")){
+                        while(1){
+                            // while(read(sockfd[i], buff, socketBufferSize) == 0){
+                            //     continue;
+                            // }
+                            read(sockfd[i], buff, socketBufferSize);
+                            if(!strcmp(buff, "done")){
+                                printf("\n");
+                                break;
+                            }
+                            printf("%s", buff);
+                        }
+                    }else if(!strcmp(buff, "not found")){
+                        continue;
+                    }
+                }
+            }
+
+            if(!strcmp(token, "/exit")){
+                char buff[socketBufferSize];
+                memset(buff, 0, socketBufferSize);
+                strcpy(buff, "exit");
+
+                for(int i = 0; i < numMonitors; i++){
+                    write(sockfd[i], "exit", socketBufferSize);
                 }
 
                 break;

@@ -30,7 +30,6 @@ int file_count;
 //TODO:
 //      remove file parse error
 
-
 // Thread function for file parsing
 void *parserThreadFunc(void *vargp){
     Database db = vargp;
@@ -473,6 +472,72 @@ int main(int argc, char *argv[]){
                 free(id);
                 free(virName);
             }
+
+            if(!strcmp(buff, "searchVaccinationStatus")){
+                // while(read(sockfd, buff, socketBufferSize) == 0){
+                //     continue;
+                // }
+                read(new_socket, buff, socketBufferSize);
+
+                char *citizenID = malloc(strlen(buff)+1);
+                strcpy(citizenID, buff);
+
+                Person per = HTGetItem(db->persons, citizenID);
+                
+                if(per == NULL){
+                    strcpy(buff, "not found");
+                    write(new_socket, buff, socketBufferSize);
+                    continue;
+                }
+
+                strcpy(buff, "found");
+                write(new_socket, buff, socketBufferSize);
+                strcpy(buff, citizenID);
+                strcat(buff, " ");
+                write(new_socket, buff, socketBufferSize);
+                strcpy(buff, per->firstName);
+                strcat(buff, " ");
+                write(new_socket, buff, socketBufferSize);
+                strcpy(buff, per->lastName);
+                strcat(buff, " ");
+                write(new_socket, buff, socketBufferSize);
+                strcpy(buff, per->country->name);
+                strcat(buff, "\n");
+                write(new_socket, buff, socketBufferSize);
+                // strcpy(buff, "AGE ");
+                sprintf(buff, "AGE %d", per->age);
+                strcat(buff, "\n");
+                write(new_socket, buff, socketBufferSize);
+                
+                for(int i = 0; i < db->viruses->curSize; i++){
+                    for(Listptr l = db->viruses->ht[i]->next; l != l->tail; l = l->next){
+                        Virus vir = ((HTEntry)(l->value))->item;
+                        char *vname = vir->name;
+                        VaccRecord rec = skipGet(vir->vaccinated_persons, citizenID);
+                        if(rec){
+                            strcpy(buff, vname);
+                            strcat(buff, " ");
+                            write(new_socket, buff, socketBufferSize);
+                            strcpy(buff, "VACCINATED ON ");
+                            write(new_socket, buff, socketBufferSize);
+                            //strcpy(buff, "");
+                            sprintf(buff, "%02d-%02d-%04d", rec->date->day, rec->date->month, rec->date->year);
+                            strcat(buff, "\n");
+                            write(new_socket, buff, socketBufferSize);
+                        }else{
+                            strcpy(buff, vname);
+                            strcat(buff, " ");
+                            write(new_socket, buff, socketBufferSize);
+                            strcpy(buff, "NOT YET VACCINATED\n");
+                            write(new_socket, buff, socketBufferSize);
+                        }
+                    }
+                }
+
+                strcpy(buff, "done");
+                write(new_socket, buff, socketBufferSize);
+            }
+
             if(!strcmp(buff, "exit")){
                 break;
             }
